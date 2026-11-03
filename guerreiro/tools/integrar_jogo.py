@@ -9,8 +9,10 @@ src, out = sys.argv[1], sys.argv[2]
 G = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 s = open(src, encoding='utf-8').read()
 
-mods = ''.join('<script>/* %s */\n%s</script>\n' % (f, open(os.path.join(G, f), encoding='utf-8').read())
-               for f in ['guerreiro-imagens.js', 'guerreiro-cabeca.js', 'guerreiro-corpo.js', 'guerreiro-osseo.js'])
+M = os.path.join(G, '..', 'mapa')
+mods = ''.join('<script>/* %s */\n%s</script>\n' % (os.path.basename(f), open(f, encoding='utf-8').read())
+               for f in [os.path.join(M, 'vendor', 'simplex-noise.js'), os.path.join(M, 'mapa-vida.js')] +
+                        [os.path.join(G, f) for f in ['guerreiro-imagens.js', 'guerreiro-cabeca.js', 'guerreiro-corpo.js', 'guerreiro-osseo.js']])
 lib = '<script src="https://cdn.jsdelivr.net/npm/ts-fsrs@5.4.2/dist/index.umd.js"></script>\n'
 assert s.count(lib) == 1
 s = s.replace(lib, lib + mods)
@@ -28,6 +30,32 @@ s = s.replace(a, a + """  if (P.cls.id === 'guerreiro' && window.GuerreiroOsseo)
     return;
   }
 """)
+
+# --- mapa: chão orgânico, osso trabecular, props pintados, fauna e esporos (mapa/mapa-vida.js) ---
+def patch(old, new, count=1):
+    global s
+    assert s.count(old) == count, old[:80]
+    s = s.replace(old, new)
+# sem lajotas: tira as juntas, a variação de cor por bloco e o relevo de cada bloco (o tecido passa a ser contínuo)
+patch("      if (rt !== 'finger') {\n        if (ji)", "      if (rt !== 'finger' && !window.MapaVida) {\n        if (ji)")
+patch("const k = 1 + (sh - .5) * .22 * fl; c = [c[0] * k, c[1] * k, c[2] * k]; if (r.type !== 'finger' && !glow[id]) hz[id] += sh * 3.2;",
+      "const k = window.MapaVida ? 1 + (vnoise(wx * .021, wy * .021) - .5) * .14 : 1 + (sh - .5) * .22 * fl; c = [c[0] * k, c[1] * k, c[2] * k]; if (r.type !== 'finger' && !glow[id] && !window.MapaVida) hz[id] += sh * 3.2;")
+# tabaqueira anatômica: de verde para o roxo-avermelhado de tecido contundido
+patch("else if (r.type === 'fossa') c = [66 + n1 * 26 + n2 * 14, 100 + n1 * 22, 68 + n1 * 16];",
+      "else if (r.type === 'fossa') c = window.MapaVida ? [86 + n1 * 26 + n2 * 14, 40 + n1 * 14, 58 + n1 * 18] : [66 + n1 * 26 + n2 * 14, 100 + n1 * 22, 68 + n1 * 16];")
+patch("  // 2) ossos voxel (mesmo padrão para todos)",
+      "  if (window.MapaVida) MapaVida.tingirTerreno({ tiles, TILE, ISO_K, ISO_OX, ISO_OY, screenToWorld, isoX, isoY, liftAt, groundAt, regionAt, tileCtx, TCOLS, TROWS, WORLD_W, WORLD_H, TEND });\n  // 2) ossos voxel (mesmo padrão para todos)")
+patch("    // contorno inferior escuro (assenta o osso no chão)\n    b.cells = null;\n",
+      "    // contorno inferior escuro (assenta o osso no chão)\n    b.cells = null;\n    if (window.MapaVida) MapaVida.texturizarOsso(cv);\n")
+patch("function drawProp(p) {\n", "function drawProp(p) {\n  if (window.MapaVida && MapaVida.desenharProp(p)) return;\n")
+patch("  pushItem(P.x + P.y, drawPlayer, null);\n", "  pushItem(P.x + P.y, drawPlayer, null);\n  if (window.MapaVida) MapaVida.empilhar(pushItem, inView);\n")
+patch("  drawArtWorldFX();\n  ctx.globalCompositeOperation = 'source-over';", "  drawArtWorldFX();\n  if (window.MapaVida) MapaVida.brilhos();\n  ctx.globalCompositeOperation = 'source-over';")
+
+# tendão: as células só ganham relevo; o desenho liso vem do MapaVida
+patch("if (dT < 12) { c = mix3(c, [214, 202, 172], .85 + .15 * (1 - dT / 12)); hz[id] += 3 * (1 - dT / 12); }",
+      "if (dT < 12) { c = window.MapaVida ? mix3(c, [96, 40, 40], .35) : mix3(c, [214, 202, 172], .85 + .15 * (1 - dT / 12)); hz[id] += 3 * (1 - dT / 12); }")
+# minimapa: a mesma cor da tabaqueira
+patch("r.type === 'fossa' ? [52, 80, 56] :", "r.type === 'fossa' ? (window.MapaVida ? [78, 36, 52] : [52, 80, 56]) :")
 
 # --- recortes em cache dos atlas ---
 helper = """

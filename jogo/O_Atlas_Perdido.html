@@ -524,6 +524,745 @@ body.touch #tAtk canvas,body.touch #tS1 canvas,body.touch #tS2 canvas,body.touch
   <button id="clsBack">Voltar ao início</button>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/ts-fsrs@5.4.2/dist/index.umd.js"></script>
+<script>/* simplex-noise.js */
+/*
+ * A fast javascript implementation of simplex noise by Jonas Wagner
+
+Based on a speed-improved simplex noise algorithm for 2D, 3D and 4D in Java.
+Which is based on example code by Stefan Gustavson (stegu@itn.liu.se).
+With Optimisations by Peter Eastman (peastman@drizzle.stanford.edu).
+Better rank ordering method by Stefan Gustavson in 2012.
+
+
+ Copyright (c) 2018 Jonas Wagner
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights
+ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ copies of the Software, and to permit persons to whom the Software is
+ furnished to do so, subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in all
+ copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ SOFTWARE.
+ */
+(function() {
+  'use strict';
+
+  var F2 = 0.5 * (Math.sqrt(3.0) - 1.0);
+  var G2 = (3.0 - Math.sqrt(3.0)) / 6.0;
+  var F3 = 1.0 / 3.0;
+  var G3 = 1.0 / 6.0;
+  var F4 = (Math.sqrt(5.0) - 1.0) / 4.0;
+  var G4 = (5.0 - Math.sqrt(5.0)) / 20.0;
+
+  function SimplexNoise(randomOrSeed) {
+    var random;
+    if (typeof randomOrSeed == 'function') {
+      random = randomOrSeed;
+    }
+    else if (randomOrSeed) {
+      random = alea(randomOrSeed);
+    } else {
+      random = Math.random;
+    }
+    this.p = buildPermutationTable(random);
+    this.perm = new Uint8Array(512);
+    this.permMod12 = new Uint8Array(512);
+    for (var i = 0; i < 512; i++) {
+      this.perm[i] = this.p[i & 255];
+      this.permMod12[i] = this.perm[i] % 12;
+    }
+
+  }
+  SimplexNoise.prototype = {
+    grad3: new Float32Array([1, 1, 0,
+      -1, 1, 0,
+      1, -1, 0,
+
+      -1, -1, 0,
+      1, 0, 1,
+      -1, 0, 1,
+
+      1, 0, -1,
+      -1, 0, -1,
+      0, 1, 1,
+
+      0, -1, 1,
+      0, 1, -1,
+      0, -1, -1]),
+    grad4: new Float32Array([0, 1, 1, 1, 0, 1, 1, -1, 0, 1, -1, 1, 0, 1, -1, -1,
+      0, -1, 1, 1, 0, -1, 1, -1, 0, -1, -1, 1, 0, -1, -1, -1,
+      1, 0, 1, 1, 1, 0, 1, -1, 1, 0, -1, 1, 1, 0, -1, -1,
+      -1, 0, 1, 1, -1, 0, 1, -1, -1, 0, -1, 1, -1, 0, -1, -1,
+      1, 1, 0, 1, 1, 1, 0, -1, 1, -1, 0, 1, 1, -1, 0, -1,
+      -1, 1, 0, 1, -1, 1, 0, -1, -1, -1, 0, 1, -1, -1, 0, -1,
+      1, 1, 1, 0, 1, 1, -1, 0, 1, -1, 1, 0, 1, -1, -1, 0,
+      -1, 1, 1, 0, -1, 1, -1, 0, -1, -1, 1, 0, -1, -1, -1, 0]),
+    noise2D: function(xin, yin) {
+      var permMod12 = this.permMod12;
+      var perm = this.perm;
+      var grad3 = this.grad3;
+      var n0 = 0; // Noise contributions from the three corners
+      var n1 = 0;
+      var n2 = 0;
+      // Skew the input space to determine which simplex cell we're in
+      var s = (xin + yin) * F2; // Hairy factor for 2D
+      var i = Math.floor(xin + s);
+      var j = Math.floor(yin + s);
+      var t = (i + j) * G2;
+      var X0 = i - t; // Unskew the cell origin back to (x,y) space
+      var Y0 = j - t;
+      var x0 = xin - X0; // The x,y distances from the cell origin
+      var y0 = yin - Y0;
+      // For the 2D case, the simplex shape is an equilateral triangle.
+      // Determine which simplex we are in.
+      var i1, j1; // Offsets for second (middle) corner of simplex in (i,j) coords
+      if (x0 > y0) {
+        i1 = 1;
+        j1 = 0;
+      } // lower triangle, XY order: (0,0)->(1,0)->(1,1)
+      else {
+        i1 = 0;
+        j1 = 1;
+      } // upper triangle, YX order: (0,0)->(0,1)->(1,1)
+      // A step of (1,0) in (i,j) means a step of (1-c,-c) in (x,y), and
+      // a step of (0,1) in (i,j) means a step of (-c,1-c) in (x,y), where
+      // c = (3-sqrt(3))/6
+      var x1 = x0 - i1 + G2; // Offsets for middle corner in (x,y) unskewed coords
+      var y1 = y0 - j1 + G2;
+      var x2 = x0 - 1.0 + 2.0 * G2; // Offsets for last corner in (x,y) unskewed coords
+      var y2 = y0 - 1.0 + 2.0 * G2;
+      // Work out the hashed gradient indices of the three simplex corners
+      var ii = i & 255;
+      var jj = j & 255;
+      // Calculate the contribution from the three corners
+      var t0 = 0.5 - x0 * x0 - y0 * y0;
+      if (t0 >= 0) {
+        var gi0 = permMod12[ii + perm[jj]] * 3;
+        t0 *= t0;
+        n0 = t0 * t0 * (grad3[gi0] * x0 + grad3[gi0 + 1] * y0); // (x,y) of grad3 used for 2D gradient
+      }
+      var t1 = 0.5 - x1 * x1 - y1 * y1;
+      if (t1 >= 0) {
+        var gi1 = permMod12[ii + i1 + perm[jj + j1]] * 3;
+        t1 *= t1;
+        n1 = t1 * t1 * (grad3[gi1] * x1 + grad3[gi1 + 1] * y1);
+      }
+      var t2 = 0.5 - x2 * x2 - y2 * y2;
+      if (t2 >= 0) {
+        var gi2 = permMod12[ii + 1 + perm[jj + 1]] * 3;
+        t2 *= t2;
+        n2 = t2 * t2 * (grad3[gi2] * x2 + grad3[gi2 + 1] * y2);
+      }
+      // Add contributions from each corner to get the final noise value.
+      // The result is scaled to return values in the interval [-1,1].
+      return 70.0 * (n0 + n1 + n2);
+    },
+    // 3D simplex noise
+    noise3D: function(xin, yin, zin) {
+      var permMod12 = this.permMod12;
+      var perm = this.perm;
+      var grad3 = this.grad3;
+      var n0, n1, n2, n3; // Noise contributions from the four corners
+      // Skew the input space to determine which simplex cell we're in
+      var s = (xin + yin + zin) * F3; // Very nice and simple skew factor for 3D
+      var i = Math.floor(xin + s);
+      var j = Math.floor(yin + s);
+      var k = Math.floor(zin + s);
+      var t = (i + j + k) * G3;
+      var X0 = i - t; // Unskew the cell origin back to (x,y,z) space
+      var Y0 = j - t;
+      var Z0 = k - t;
+      var x0 = xin - X0; // The x,y,z distances from the cell origin
+      var y0 = yin - Y0;
+      var z0 = zin - Z0;
+      // For the 3D case, the simplex shape is a slightly irregular tetrahedron.
+      // Determine which simplex we are in.
+      var i1, j1, k1; // Offsets for second corner of simplex in (i,j,k) coords
+      var i2, j2, k2; // Offsets for third corner of simplex in (i,j,k) coords
+      if (x0 >= y0) {
+        if (y0 >= z0) {
+          i1 = 1;
+          j1 = 0;
+          k1 = 0;
+          i2 = 1;
+          j2 = 1;
+          k2 = 0;
+        } // X Y Z order
+        else if (x0 >= z0) {
+          i1 = 1;
+          j1 = 0;
+          k1 = 0;
+          i2 = 1;
+          j2 = 0;
+          k2 = 1;
+        } // X Z Y order
+        else {
+          i1 = 0;
+          j1 = 0;
+          k1 = 1;
+          i2 = 1;
+          j2 = 0;
+          k2 = 1;
+        } // Z X Y order
+      }
+      else { // x0<y0
+        if (y0 < z0) {
+          i1 = 0;
+          j1 = 0;
+          k1 = 1;
+          i2 = 0;
+          j2 = 1;
+          k2 = 1;
+        } // Z Y X order
+        else if (x0 < z0) {
+          i1 = 0;
+          j1 = 1;
+          k1 = 0;
+          i2 = 0;
+          j2 = 1;
+          k2 = 1;
+        } // Y Z X order
+        else {
+          i1 = 0;
+          j1 = 1;
+          k1 = 0;
+          i2 = 1;
+          j2 = 1;
+          k2 = 0;
+        } // Y X Z order
+      }
+      // A step of (1,0,0) in (i,j,k) means a step of (1-c,-c,-c) in (x,y,z),
+      // a step of (0,1,0) in (i,j,k) means a step of (-c,1-c,-c) in (x,y,z), and
+      // a step of (0,0,1) in (i,j,k) means a step of (-c,-c,1-c) in (x,y,z), where
+      // c = 1/6.
+      var x1 = x0 - i1 + G3; // Offsets for second corner in (x,y,z) coords
+      var y1 = y0 - j1 + G3;
+      var z1 = z0 - k1 + G3;
+      var x2 = x0 - i2 + 2.0 * G3; // Offsets for third corner in (x,y,z) coords
+      var y2 = y0 - j2 + 2.0 * G3;
+      var z2 = z0 - k2 + 2.0 * G3;
+      var x3 = x0 - 1.0 + 3.0 * G3; // Offsets for last corner in (x,y,z) coords
+      var y3 = y0 - 1.0 + 3.0 * G3;
+      var z3 = z0 - 1.0 + 3.0 * G3;
+      // Work out the hashed gradient indices of the four simplex corners
+      var ii = i & 255;
+      var jj = j & 255;
+      var kk = k & 255;
+      // Calculate the contribution from the four corners
+      var t0 = 0.6 - x0 * x0 - y0 * y0 - z0 * z0;
+      if (t0 < 0) n0 = 0.0;
+      else {
+        var gi0 = permMod12[ii + perm[jj + perm[kk]]] * 3;
+        t0 *= t0;
+        n0 = t0 * t0 * (grad3[gi0] * x0 + grad3[gi0 + 1] * y0 + grad3[gi0 + 2] * z0);
+      }
+      var t1 = 0.6 - x1 * x1 - y1 * y1 - z1 * z1;
+      if (t1 < 0) n1 = 0.0;
+      else {
+        var gi1 = permMod12[ii + i1 + perm[jj + j1 + perm[kk + k1]]] * 3;
+        t1 *= t1;
+        n1 = t1 * t1 * (grad3[gi1] * x1 + grad3[gi1 + 1] * y1 + grad3[gi1 + 2] * z1);
+      }
+      var t2 = 0.6 - x2 * x2 - y2 * y2 - z2 * z2;
+      if (t2 < 0) n2 = 0.0;
+      else {
+        var gi2 = permMod12[ii + i2 + perm[jj + j2 + perm[kk + k2]]] * 3;
+        t2 *= t2;
+        n2 = t2 * t2 * (grad3[gi2] * x2 + grad3[gi2 + 1] * y2 + grad3[gi2 + 2] * z2);
+      }
+      var t3 = 0.6 - x3 * x3 - y3 * y3 - z3 * z3;
+      if (t3 < 0) n3 = 0.0;
+      else {
+        var gi3 = permMod12[ii + 1 + perm[jj + 1 + perm[kk + 1]]] * 3;
+        t3 *= t3;
+        n3 = t3 * t3 * (grad3[gi3] * x3 + grad3[gi3 + 1] * y3 + grad3[gi3 + 2] * z3);
+      }
+      // Add contributions from each corner to get the final noise value.
+      // The result is scaled to stay just inside [-1,1]
+      return 32.0 * (n0 + n1 + n2 + n3);
+    },
+    // 4D simplex noise, better simplex rank ordering method 2012-03-09
+    noise4D: function(x, y, z, w) {
+      var perm = this.perm;
+      var grad4 = this.grad4;
+
+      var n0, n1, n2, n3, n4; // Noise contributions from the five corners
+      // Skew the (x,y,z,w) space to determine which cell of 24 simplices we're in
+      var s = (x + y + z + w) * F4; // Factor for 4D skewing
+      var i = Math.floor(x + s);
+      var j = Math.floor(y + s);
+      var k = Math.floor(z + s);
+      var l = Math.floor(w + s);
+      var t = (i + j + k + l) * G4; // Factor for 4D unskewing
+      var X0 = i - t; // Unskew the cell origin back to (x,y,z,w) space
+      var Y0 = j - t;
+      var Z0 = k - t;
+      var W0 = l - t;
+      var x0 = x - X0; // The x,y,z,w distances from the cell origin
+      var y0 = y - Y0;
+      var z0 = z - Z0;
+      var w0 = w - W0;
+      // For the 4D case, the simplex is a 4D shape I won't even try to describe.
+      // To find out which of the 24 possible simplices we're in, we need to
+      // determine the magnitude ordering of x0, y0, z0 and w0.
+      // Six pair-wise comparisons are performed between each possible pair
+      // of the four coordinates, and the results are used to rank the numbers.
+      var rankx = 0;
+      var ranky = 0;
+      var rankz = 0;
+      var rankw = 0;
+      if (x0 > y0) rankx++;
+      else ranky++;
+      if (x0 > z0) rankx++;
+      else rankz++;
+      if (x0 > w0) rankx++;
+      else rankw++;
+      if (y0 > z0) ranky++;
+      else rankz++;
+      if (y0 > w0) ranky++;
+      else rankw++;
+      if (z0 > w0) rankz++;
+      else rankw++;
+      var i1, j1, k1, l1; // The integer offsets for the second simplex corner
+      var i2, j2, k2, l2; // The integer offsets for the third simplex corner
+      var i3, j3, k3, l3; // The integer offsets for the fourth simplex corner
+      // simplex[c] is a 4-vector with the numbers 0, 1, 2 and 3 in some order.
+      // Many values of c will never occur, since e.g. x>y>z>w makes x<z, y<w and x<w
+      // impossible. Only the 24 indices which have non-zero entries make any sense.
+      // We use a thresholding to set the coordinates in turn from the largest magnitude.
+      // Rank 3 denotes the largest coordinate.
+      i1 = rankx >= 3 ? 1 : 0;
+      j1 = ranky >= 3 ? 1 : 0;
+      k1 = rankz >= 3 ? 1 : 0;
+      l1 = rankw >= 3 ? 1 : 0;
+      // Rank 2 denotes the second largest coordinate.
+      i2 = rankx >= 2 ? 1 : 0;
+      j2 = ranky >= 2 ? 1 : 0;
+      k2 = rankz >= 2 ? 1 : 0;
+      l2 = rankw >= 2 ? 1 : 0;
+      // Rank 1 denotes the second smallest coordinate.
+      i3 = rankx >= 1 ? 1 : 0;
+      j3 = ranky >= 1 ? 1 : 0;
+      k3 = rankz >= 1 ? 1 : 0;
+      l3 = rankw >= 1 ? 1 : 0;
+      // The fifth corner has all coordinate offsets = 1, so no need to compute that.
+      var x1 = x0 - i1 + G4; // Offsets for second corner in (x,y,z,w) coords
+      var y1 = y0 - j1 + G4;
+      var z1 = z0 - k1 + G4;
+      var w1 = w0 - l1 + G4;
+      var x2 = x0 - i2 + 2.0 * G4; // Offsets for third corner in (x,y,z,w) coords
+      var y2 = y0 - j2 + 2.0 * G4;
+      var z2 = z0 - k2 + 2.0 * G4;
+      var w2 = w0 - l2 + 2.0 * G4;
+      var x3 = x0 - i3 + 3.0 * G4; // Offsets for fourth corner in (x,y,z,w) coords
+      var y3 = y0 - j3 + 3.0 * G4;
+      var z3 = z0 - k3 + 3.0 * G4;
+      var w3 = w0 - l3 + 3.0 * G4;
+      var x4 = x0 - 1.0 + 4.0 * G4; // Offsets for last corner in (x,y,z,w) coords
+      var y4 = y0 - 1.0 + 4.0 * G4;
+      var z4 = z0 - 1.0 + 4.0 * G4;
+      var w4 = w0 - 1.0 + 4.0 * G4;
+      // Work out the hashed gradient indices of the five simplex corners
+      var ii = i & 255;
+      var jj = j & 255;
+      var kk = k & 255;
+      var ll = l & 255;
+      // Calculate the contribution from the five corners
+      var t0 = 0.6 - x0 * x0 - y0 * y0 - z0 * z0 - w0 * w0;
+      if (t0 < 0) n0 = 0.0;
+      else {
+        var gi0 = (perm[ii + perm[jj + perm[kk + perm[ll]]]] % 32) * 4;
+        t0 *= t0;
+        n0 = t0 * t0 * (grad4[gi0] * x0 + grad4[gi0 + 1] * y0 + grad4[gi0 + 2] * z0 + grad4[gi0 + 3] * w0);
+      }
+      var t1 = 0.6 - x1 * x1 - y1 * y1 - z1 * z1 - w1 * w1;
+      if (t1 < 0) n1 = 0.0;
+      else {
+        var gi1 = (perm[ii + i1 + perm[jj + j1 + perm[kk + k1 + perm[ll + l1]]]] % 32) * 4;
+        t1 *= t1;
+        n1 = t1 * t1 * (grad4[gi1] * x1 + grad4[gi1 + 1] * y1 + grad4[gi1 + 2] * z1 + grad4[gi1 + 3] * w1);
+      }
+      var t2 = 0.6 - x2 * x2 - y2 * y2 - z2 * z2 - w2 * w2;
+      if (t2 < 0) n2 = 0.0;
+      else {
+        var gi2 = (perm[ii + i2 + perm[jj + j2 + perm[kk + k2 + perm[ll + l2]]]] % 32) * 4;
+        t2 *= t2;
+        n2 = t2 * t2 * (grad4[gi2] * x2 + grad4[gi2 + 1] * y2 + grad4[gi2 + 2] * z2 + grad4[gi2 + 3] * w2);
+      }
+      var t3 = 0.6 - x3 * x3 - y3 * y3 - z3 * z3 - w3 * w3;
+      if (t3 < 0) n3 = 0.0;
+      else {
+        var gi3 = (perm[ii + i3 + perm[jj + j3 + perm[kk + k3 + perm[ll + l3]]]] % 32) * 4;
+        t3 *= t3;
+        n3 = t3 * t3 * (grad4[gi3] * x3 + grad4[gi3 + 1] * y3 + grad4[gi3 + 2] * z3 + grad4[gi3 + 3] * w3);
+      }
+      var t4 = 0.6 - x4 * x4 - y4 * y4 - z4 * z4 - w4 * w4;
+      if (t4 < 0) n4 = 0.0;
+      else {
+        var gi4 = (perm[ii + 1 + perm[jj + 1 + perm[kk + 1 + perm[ll + 1]]]] % 32) * 4;
+        t4 *= t4;
+        n4 = t4 * t4 * (grad4[gi4] * x4 + grad4[gi4 + 1] * y4 + grad4[gi4 + 2] * z4 + grad4[gi4 + 3] * w4);
+      }
+      // Sum up and scale the result to cover the range [-1,1]
+      return 27.0 * (n0 + n1 + n2 + n3 + n4);
+    }
+  };
+
+  function buildPermutationTable(random) {
+    var i;
+    var p = new Uint8Array(256);
+    for (i = 0; i < 256; i++) {
+      p[i] = i;
+    }
+    for (i = 0; i < 255; i++) {
+      var r = i + ~~(random() * (256 - i));
+      var aux = p[i];
+      p[i] = p[r];
+      p[r] = aux;
+    }
+    return p;
+  }
+  SimplexNoise._buildPermutationTable = buildPermutationTable;
+
+  function alea() {
+    // Johannes Baagøe <baagoe@baagoe.com>, 2010
+    var s0 = 0;
+    var s1 = 0;
+    var s2 = 0;
+    var c = 1;
+
+    var mash = masher();
+    s0 = mash(' ');
+    s1 = mash(' ');
+    s2 = mash(' ');
+
+    for (var i = 0; i < arguments.length; i++) {
+      s0 -= mash(arguments[i]);
+      if (s0 < 0) {
+        s0 += 1;
+      }
+      s1 -= mash(arguments[i]);
+      if (s1 < 0) {
+        s1 += 1;
+      }
+      s2 -= mash(arguments[i]);
+      if (s2 < 0) {
+        s2 += 1;
+      }
+    }
+    mash = null;
+    return function() {
+      var t = 2091639 * s0 + c * 2.3283064365386963e-10; // 2^-32
+      s0 = s1;
+      s1 = s2;
+      return s2 = t - (c = t | 0);
+    };
+  }
+  function masher() {
+    var n = 0xefc8249d;
+    return function(data) {
+      data = data.toString();
+      for (var i = 0; i < data.length; i++) {
+        n += data.charCodeAt(i);
+        var h = 0.02519603282416938 * n;
+        n = h >>> 0;
+        h -= n;
+        h *= n;
+        n = h >>> 0;
+        h -= n;
+        n += h * 0x100000000; // 2^32
+      }
+      return (n >>> 0) * 2.3283064365386963e-10; // 2^-32
+    };
+  }
+
+  // amd
+  if (typeof define !== 'undefined' && define.amd) define(function() {return SimplexNoise;});
+  // common js
+  if (typeof exports !== 'undefined') exports.SimplexNoise = SimplexNoise;
+  // browser
+  else if (typeof window !== 'undefined') window.SimplexNoise = SimplexNoise;
+  // nodejs
+  if (typeof module !== 'undefined') {
+    module.exports = SimplexNoise;
+  }
+
+})();
+</script>
+<script>/* mapa-vida.js */
+/* =====================================================================
+   MAPA VIVO — camada estética do mapa de "O Atlas Perdido"
+   - chão orgânico: textura de tecido (simplex-noise, MIT) aplicada sobre o terreno pré-renderizado,
+     microflora pintada no chão (capilares, nervos, lascas de osso, coágulos, fibrina) por amostragem de Poisson;
+   - osso trabecular: poros e fissuras sobre os platôs de osso;
+   - props pintados por código no lugar da pixel art: cisto (cérebro), osteófito (rocha), fístula (gêiser);
+   - fauna: ácaros que perambulam e fogem do jogador, enxames de moscas e esporos luminosos.
+   Depende de SimplexNoise (vendor/simplex-noise.js). Usa as funções globais do jogo (SX, SY, isoY, liftAt,
+   groundAt, ctx, G, P, hash2) apenas no momento das chamadas.
+   ===================================================================== */
+(function (root) {
+  'use strict';
+  const TAU = Math.PI * 2;
+  const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+  const SN = root.SimplexNoise ? new root.SimplexNoise('atlas-perdido') : null;
+  const n2 = (x, y) => (SN ? SN.noise2D(x, y) : Math.sin(x * 1.7 + y * 2.3) * Math.cos(x * 0.7 - y * 1.1));
+  const fbm = (x, y, o) => { let a = 0, f = 1, w = 0.5; for (let i = 0; i < (o || 4); i++) { a += w * n2(x * f, y * f); f *= 2.03; w *= 0.5; } return a; };
+  function rng(seed) { return () => { seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+  const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return [c, c.getContext('2d')]; };
+
+  // ---------- textura de tecido (ladrilhável): manchas de baixa frequência + fibras + rede capilar ----------
+  // Retorna um padrão em tons neutros (claro/escuro com alfa) para 'soft-light' sobre o chão já pintado.
+  function tissueTile(size) {
+    const [c, g] = mk(size, size), im = g.createImageData(size, size), d = im.data, P = size / 64;
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      // coordenadas no toro para ladrilhar sem emenda
+      const a = x / size * TAU, b = y / size * TAU, R = P / 6;
+      const X = Math.cos(a) * R, Y = Math.sin(a) * R, Z = Math.cos(b) * R, W = Math.sin(b) * R;
+      const mott = fbm(X + Z * 0.7 + 3.1, Y + W * 0.7 - 1.7, 4);                       // manchas
+      const fib = Math.sin((y / size) * TAU * 22 + fbm(X * 2, Z * 2, 2) * 6) * 0.5 + 0.5;  // fibras paralelas
+      const cap = Math.abs(fbm(X * 3.1 + 9, W * 3.1 - 4, 3));                           // capilares (vales do ruído)
+      let v = 0.5 + mott * 0.32 + (fib - 0.5) * 0.12 - (cap < 0.035 ? (0.035 - cap) * 9 : 0);
+      v = clamp(v, 0, 1); const i = (y * size + x) * 4, red = cap < 0.035 ? 1 : 0;
+      d[i] = v * 255; d[i + 1] = v * (red ? 120 : 235); d[i + 2] = v * (red ? 120 : 225); d[i + 3] = 255;
+    }
+    g.putImageData(im, 0, 0); return c;
+  }
+  // ---------- osso trabecular: poros (células de Voronoi aproximadas por ruído) e fissuras ----------
+  function boneTile(size) {
+    const [c, g] = mk(size, size), im = g.createImageData(size, size), d = im.data;
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const a = x / size * TAU, b = y / size * TAU, X = Math.cos(a) * 1.4, Y = Math.sin(a) * 1.4, Z = Math.cos(b) * 1.4, W = Math.sin(b) * 1.4;
+      const pore = fbm(X * 3 + Z, Y * 3 + W, 3), crack = Math.abs(fbm(X * 1.6 - Z, W * 1.6 + 5, 4));
+      let v = 0.62 + fbm(X + 7, Z - 2, 3) * 0.18; if (pore > 0.28) v -= (pore - 0.28) * 2.2; if (crack < 0.02) v -= (0.02 - crack) * 18;
+      v = clamp(v, 0, 1); const i = (y * size + x) * 4; d[i] = v * 255; d[i + 1] = v * 236; d[i + 2] = v * 205; d[i + 3] = 255;
+    }
+    g.putImageData(im, 0, 0); return c;
+  }
+  let TT = null, BT = null;
+
+  // ---------- amostragem de Poisson (Bridson), como em kchapelier/poisson-disk-sampling (MIT) ----------
+  function poisson(w, h, r, R, k) {
+    const cs = r / Math.SQRT2, gw = Math.ceil(w / cs), gh = Math.ceil(h / cs), grid = new Int32Array(gw * gh).fill(-1), pts = [], act = [];
+    const add = p => { pts.push(p); act.push(p); grid[((p[1] / cs) | 0) * gw + ((p[0] / cs) | 0)] = pts.length - 1; };
+    add([R() * w, R() * h]);
+    while (act.length) {
+      const i = (R() * act.length) | 0, p = act[i]; let ok = false;
+      for (let t = 0; t < (k || 20); t++) {
+        const a = R() * TAU, d = r * (1 + R()), q = [p[0] + Math.cos(a) * d, p[1] + Math.sin(a) * d];
+        if (q[0] < 0 || q[1] < 0 || q[0] >= w || q[1] >= h) continue;
+        const gx = (q[0] / cs) | 0, gy = (q[1] / cs) | 0; let far = true;
+        for (let yy = Math.max(0, gy - 2); yy <= Math.min(gh - 1, gy + 2) && far; yy++) for (let xx = Math.max(0, gx - 2); xx <= Math.min(gw - 1, gx + 2); xx++) { const j = grid[yy * gw + xx]; if (j >= 0 && Math.hypot(pts[j][0] - q[0], pts[j][1] - q[1]) < r) { far = false; break; } }
+        if (far) { add(q); ok = true; break; }
+      }
+      if (!ok) act.splice(i, 1);
+    }
+    return pts;
+  }
+
+  // ---------- 1) chão: textura de tecido + microflora pintada direto nos ladrilhos ----------
+  function tingirTerreno(E) {
+    const { tiles, TILE, ISO_K, ISO_OX, ISO_OY, screenToWorld, isoX, isoY, liftAt, groundAt, regionAt, tileCtx, TCOLS, TROWS, WORLD_W, WORLD_H } = E; // E.TEND: polilinhas dos tendões
+    TT = TT || tissueTile(256);
+    const first = tiles.find(t => t); if (!first) return;
+    const pat = first.g.createPattern(TT, 'repeat'); if (pat.setTransform) pat.setTransform(new DOMMatrix().scale(2.2));
+    for (const t of tiles) {
+      if (!t) continue; const g = t.g, [mc, mg] = mk(t.cv.width, t.cv.height); mg.drawImage(t.cv, 0, 0); // máscara: o vazio continua vazio
+      g.save(); g.setTransform(ISO_K, ISO_K * 0.5, -ISO_K, ISO_K * 0.5, ISO_OX - t.c * TILE, ISO_OY - t.r * TILE);
+      const q = [[0, 0], [TILE, 0], [0, TILE], [TILE, TILE]].map(([sx, sy]) => screenToWorld(sx + t.c * TILE, sy + t.r * TILE));
+      const xs = q.map(v => v.x), ys = q.map(v => v.y);
+      g.globalCompositeOperation = 'soft-light'; g.globalAlpha = 0.85; g.fillStyle = pat;
+      g.fillRect(Math.min(...xs) - 200, Math.min(...ys) - 200, Math.max(...xs) - Math.min(...xs) + 400, Math.max(...ys) - Math.min(...ys) + 400);
+      g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'destination-in'; g.drawImage(mc, 0, 0);
+      g.restore();
+    }
+    // tendões: cordões lisos e brilhantes (curva de Bézier pelos pontos de cada tendão), no lugar dos degraus de célula
+    if (E.TEND) for (const T of E.TEND) {
+      const pts = []; for (let i = 0; i <= 80; i++) { const t = i / 80, u = 1 - t; pts.push([u * u * T[0][0] + 2 * u * t * T[1][0] + t * t * T[2][0], u * u * T[0][1] + 2 * u * t * T[1][1] + t * t * T[2][1]]); }
+      const sp = pts.map(([x, y]) => [isoX(x, y), isoY(x, y) - liftAt(x, y)]);
+      let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; for (const [x, y] of sp) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+      for (let c = Math.max(0, Math.floor((x0 - 20) / TILE)); c <= Math.min(TCOLS - 1, Math.floor((x1 + 20) / TILE)); c++)
+        for (let r = Math.max(0, Math.floor((y0 - 20) / TILE)); r <= Math.min(TROWS - 1, Math.floor((y1 + 20) / TILE)); r++) {
+          const g = tileCtx(c, r); g.save(); g.lineCap = 'round'; g.lineJoin = 'round';
+          const path = (dy) => { g.beginPath(); sp.forEach(([x, y], i) => (i ? g.lineTo(x, y + dy) : g.moveTo(x, y + dy))); };
+          path(3); g.strokeStyle = 'rgba(20,4,6,.55)'; g.lineWidth = 15; g.stroke();          // sombra de contato
+          path(0); g.strokeStyle = '#b8a888'; g.lineWidth = 12; g.stroke();                  // corpo do tendão
+          path(-1.5); g.strokeStyle = '#e6dcc2'; g.lineWidth = 6; g.stroke();               // brilho perolado
+          path(-3); g.strokeStyle = 'rgba(255,250,236,.55)'; g.lineWidth = 1.6; g.stroke();  // reflexo úmido
+          for (const dy of [-3.5, 0, 3.5]) { path(dy); g.strokeStyle = 'rgba(120,100,76,.35)'; g.lineWidth = 0.8; g.stroke(); } // fibras colágenas
+          g.restore();
+        }
+    }
+    // microflora: desenhada em coordenadas de tela de cada ladrilho que a mancha toca
+    const R = rng(4242), pts = poisson(WORLD_W, WORLD_H, 95, R, 12);
+    const onTiles = (x0, y0, x1, y1, fn) => {
+      for (let c = Math.max(0, Math.floor(x0 / TILE)); c <= Math.min(TCOLS - 1, Math.floor(x1 / TILE)); c++)
+        for (let r = Math.max(0, Math.floor(y0 / TILE)); r <= Math.min(TROWS - 1, Math.floor(y1 / TILE)); r++) { const g = tileCtx(c, r); g.save(); fn(g); g.restore(); } // tileCtx já vem deslocado para o ladrilho
+    };
+    const S = (x, y) => [isoX(x, y), isoY(x, y) - liftAt(x, y)];
+    for (const [wx, wy] of pts) {
+      if (groundAt(wx, wy) < -900) continue; const reg = regionAt(wx, wy); if (!reg) continue;
+      const k = R(), rt = reg.type;
+      // coerência por região: dedos = tendão/fibrina; vale e montes = capilares e coágulos; fossa = nervo; carpo = lascas de osso
+      const kind = rt === 'carpal' ? (k < 0.6 ? 'osso' : 'fibrina') : rt === 'fossa' ? (k < 0.7 ? 'nervo' : 'capilar') : rt === 'finger' ? (k < 0.5 ? 'fibrina' : k < 0.8 ? 'capilar' : 'coagulo') : (k < 0.42 ? 'capilar' : k < 0.62 ? 'coagulo' : k < 0.8 ? 'nervo' : k < 0.92 ? 'osso' : 'fibrina');
+      const [cx, cy] = S(wx, wy), sz = 18 + R() * 26;
+      onTiles(cx - sz * 1.6, cy - sz, cx + sz * 1.6, cy + sz, g => paintDecal(g, kind, wx, wy, sz, R, S));
+    }
+  }
+  // traços em perspectiva isométrica (pontos no mundo -> tela) para assentar no chão
+  function paintDecal(g, kind, wx, wy, sz, R, S) {
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    const line = (pts, col, w) => { g.strokeStyle = col; g.lineWidth = w; g.beginPath(); pts.forEach(([x, y], i) => { const [a, b] = S(x, y); i ? g.lineTo(a, b) : g.moveTo(a, b); }); g.stroke(); };
+    const seed = Math.floor(wx * 13 + wy * 7);
+    if (kind === 'capilar') { // árvore capilar ramificada (vermelho-escuro com brilho úmido)
+      const branch = (x, y, a, L, d) => { if (d > 4 || L < 4) return; const x2 = x + Math.cos(a) * L, y2 = y + Math.sin(a) * L;
+        line([[x, y], [x + Math.cos(a + 0.3) * L * 0.5, y + Math.sin(a + 0.3) * L * 0.5], [x2, y2]], `rgba(${60 + d * 10},6,14,${0.75 - d * 0.1})`, Math.max(0.6, 2.6 - d * 0.5));
+        branch(x2, y2, a - 0.5 - R() * 0.4, L * 0.68, d + 1); branch(x2, y2, a + 0.4 + R() * 0.4, L * 0.62, d + 1); };
+      branch(wx, wy, R() * TAU, sz * 0.9, 0);
+    } else if (kind === 'nervo') { // fio nervoso amarelado com nódulos (ramos sinuosos)
+      const pts = []; let x = wx, y = wy, a = R() * TAU; for (let i = 0; i < 9; i++) { pts.push([x, y]); a += n2(seed + i * 0.4, 3.3) * 0.8; x += Math.cos(a) * sz * 0.35; y += Math.sin(a) * sz * 0.35; }
+      line(pts, 'rgba(40,22,6,.55)', 3.2); line(pts, 'rgba(226,190,96,.55)', 1.5);
+      for (let i = 2; i < pts.length; i += 3) { const [a2, b2] = S(pts[i][0], pts[i][1]); g.fillStyle = 'rgba(240,206,120,.6)'; g.beginPath(); g.ellipse(a2, b2, 2.2, 1.4, 0, 0, TAU); g.fill(); }
+    } else if (kind === 'osso') { // lascas de osso esbranquiçado
+      for (let i = 0; i < 4; i++) { const x = wx + (R() - 0.5) * sz, y = wy + (R() - 0.5) * sz, a = R() * TAU, L = 4 + R() * 9;
+        line([[x, y], [x + Math.cos(a) * L, y + Math.sin(a) * L]], 'rgba(30,20,12,.5)', 3.4); line([[x, y], [x + Math.cos(a) * L, y + Math.sin(a) * L]], 'rgba(224,210,176,.85)', 2); }
+    } else if (kind === 'coagulo') { // coágulo escuro com borda úmida
+      const [cx, cy] = S(wx, wy), r = sz * 0.42; const gr = g.createRadialGradient(cx - r * 0.2, cy - r * 0.15, 0, cx, cy, r);
+      gr.addColorStop(0, 'rgba(70,4,10,.75)'); gr.addColorStop(0.7, 'rgba(40,2,6,.6)'); gr.addColorStop(1, 'rgba(40,2,6,0)');
+      g.fillStyle = gr; g.beginPath(); g.ellipse(cx, cy, r, r * 0.5, 0, 0, TAU); g.fill();
+      g.fillStyle = 'rgba(255,170,160,.18)'; g.beginPath(); g.ellipse(cx - r * 0.25, cy - r * 0.12, r * 0.22, r * 0.08, -0.3, 0, TAU); g.fill();
+    } else { // fibrina: filamentos claros e finos
+      for (let i = 0; i < 5; i++) { const pts = []; let x = wx + (R() - 0.5) * sz * 0.6, y = wy + (R() - 0.5) * sz * 0.6, a = R() * TAU;
+        for (let j = 0; j < 5; j++) { pts.push([x, y]); a += (R() - 0.5) * 0.9; x += Math.cos(a) * sz * 0.22; y += Math.sin(a) * sz * 0.22; }
+        line(pts, 'rgba(236,214,190,.32)', 1); }
+    }
+  }
+
+  // ---------- 2) osso trabecular sobre os platôs ----------
+  function texturizarOsso(cv) {
+    BT = BT || boneTile(128);
+    const [tc, tg] = mk(cv.width, cv.height); tg.fillStyle = tg.createPattern(BT, 'repeat'); tg.fillRect(0, 0, cv.width, cv.height);
+    tg.globalCompositeOperation = 'destination-in'; tg.drawImage(cv, 0, 0);            // poros só dentro do osso
+    const g = cv.getContext('2d'); g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'multiply'; g.globalAlpha = 0.6; g.drawImage(tc, 0, 0); g.restore();
+  }
+
+  // ---------- 3) props pintados (substituem a pixel art destoante) ----------
+  const PROPS = {};
+  function propSprite(kind, v) {
+    const key = kind + v; if (PROPS[key]) return PROPS[key];
+    const R = rng(1000 + v * 97 + kind.length * 13), W = 180, H = 170, [c, g] = mk(W, H), cx = W / 2, base = H - 16;
+    if (kind === 'cisto') { // aglomerado de cistos translúcidos com vasos e brilho úmido
+      const n = 3 + ((R() * 3) | 0), blobs = [];
+      for (let i = 0; i < n; i++) blobs.push([cx + (R() - 0.5) * 70, base - 30 - R() * 40, 24 + R() * 22]);
+      blobs.sort((a, b) => a[1] - b[1]);
+      for (const [x, y, r] of blobs) {
+        const gr = g.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.1, x, y, r);
+        gr.addColorStop(0, 'rgba(255,214,200,.95)'); gr.addColorStop(0.35, 'rgba(200,110,110,.92)'); gr.addColorStop(0.85, 'rgba(110,30,40,.95)'); gr.addColorStop(1, 'rgba(50,8,14,1)');
+        g.fillStyle = gr; g.beginPath(); g.ellipse(x, y, r, r * 0.86, 0, 0, TAU); g.fill();
+        g.strokeStyle = 'rgba(90,10,24,.7)'; g.lineWidth = 1.4; for (let k = 0; k < 4; k++) { const a = R() * TAU; g.beginPath(); g.moveTo(x + Math.cos(a) * r * 0.9, y + Math.sin(a) * r * 0.8); g.quadraticCurveTo(x + Math.cos(a + 0.6) * r * 0.4, y + Math.sin(a + 0.6) * r * 0.3, x + Math.cos(a + 1.2) * r * 0.2, y + Math.sin(a + 1.2) * r * 0.2); g.stroke(); }
+        g.fillStyle = 'rgba(255,255,245,.55)'; g.beginPath(); g.ellipse(x - r * 0.35, y - r * 0.45, r * 0.22, r * 0.12, -0.5, 0, TAU); g.fill();
+      }
+    } else if (kind === 'osteofito') { // esporão ósseo poroso com fissuras e musgo de fibrina
+      const pts = []; const N = 14, h = 90 + R() * 40, w = 46 + R() * 18;
+      for (let i = 0; i <= N; i++) { const t = i / N, a = Math.PI + t * Math.PI; const r = (t < 0.5 ? t * 2 : (1 - t) * 2); pts.push([cx + Math.cos(a) * w * (0.7 + R() * 0.3), base + Math.sin(a) * h * (0.35 + 0.65 * Math.pow(r, 0.6)) * (0.85 + R() * 0.25)]); }
+      const gr = g.createLinearGradient(cx - w, 0, cx + w, 0); gr.addColorStop(0, '#e6d8b8'); gr.addColorStop(0.55, '#b9a47c'); gr.addColorStop(1, '#5e4a32');
+      g.fillStyle = gr; g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath(); g.fill();
+      g.save(); g.clip(); BT = BT || boneTile(128); g.globalCompositeOperation = 'multiply'; g.globalAlpha = 0.7; g.fillStyle = g.createPattern(BT, 'repeat'); g.fillRect(0, 0, W, H); g.restore();
+      g.strokeStyle = 'rgba(40,24,12,.7)'; g.lineWidth = 1.6; for (let k = 0; k < 3; k++) { let x = cx + (R() - 0.5) * w, y = base - h * (0.3 + R() * 0.5); g.beginPath(); g.moveTo(x, y); for (let j = 0; j < 4; j++) { x += (R() - 0.5) * 14; y += 6 + R() * 8; g.lineTo(x, y); } g.stroke(); }
+      g.strokeStyle = 'rgba(30,18,10,.85)'; g.lineWidth = 2; g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke();
+    } else { // fístula: cratera de carne com sangue e bolhas
+      const gr = g.createRadialGradient(cx, base - 26, 6, cx, base - 20, 70);
+      gr.addColorStop(0, '#1a0204'); gr.addColorStop(0.35, '#5a0a12'); gr.addColorStop(0.62, '#9e2a30'); gr.addColorStop(0.85, '#6a1a1e'); gr.addColorStop(1, 'rgba(40,8,10,0)');
+      g.fillStyle = gr; g.beginPath(); g.ellipse(cx, base - 22, 72, 40, 0, 0, TAU); g.fill();
+      g.fillStyle = '#c84a4a'; g.beginPath(); g.ellipse(cx, base - 30, 40, 16, 0, Math.PI, TAU); g.fill(); // lábio superior
+      g.fillStyle = '#2a0306'; g.beginPath(); g.ellipse(cx, base - 26, 30, 11, 0, 0, TAU); g.fill();
+      g.fillStyle = 'rgba(160,20,28,.9)'; g.beginPath(); g.ellipse(cx, base - 24, 24, 7, 0, 0, TAU); g.fill();
+      for (let k = 0; k < 5; k++) { const x = cx + (R() - 0.5) * 36, y = base - 24 + (R() - 0.5) * 6, r = 1.5 + R() * 3; g.fillStyle = 'rgba(255,190,180,.5)'; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); }
+      g.strokeStyle = 'rgba(70,10,30,.6)'; g.lineWidth = 1.5; for (let k = 0; k < 6; k++) { const a = Math.PI * (0.05 + R() * 0.9); g.beginPath(); g.moveTo(cx + Math.cos(a) * 40, base - 22 + Math.sin(a) * 18); g.lineTo(cx + Math.cos(a) * 68, base - 22 + Math.sin(a) * 34); g.stroke(); }
+    }
+    return (PROPS[key] = c);
+  }
+  const SWAP = { brainrock: 'cisto', rock: 'osteofito', geyser: 'fistula' };
+  function desenharProp(p) {
+    const kind = SWAP[p.art]; if (!kind) return false;
+    const lift = liftAt(p.x, p.y), x = SX(p.x, p.y), y = SY(p.x, p.y, lift), v = (hash2(p.x | 0, p.y | 0) * 4) | 0, cv = propSprite(kind, v);
+    const sc = (kind === 'fistula' ? 1.1 : 0.95) * p.h / 90, w = cv.width * sc, h = cv.height * sc;
+    shadowAt(x, y + 2, p.h * 0.32, p.h * 0.11, 0.55);
+    ctx.drawImage(cv, x - w / 2, y + 6 - h, w, h);
+    if (kind === 'fistula' && Math.random() < 0.08) G.parts && G.parts.push({ x: p.x + (Math.random() - 0.5) * 20, y: p.y + (Math.random() - 0.5) * 10, z: 6, vz: 40 + Math.random() * 40, grav: 120, life: 0.7, t: 0, size: 2 + Math.random() * 2, col: '#8a1018', type: 'blood' });
+    return true;
+  }
+
+  // ---------- 4) fauna ----------
+  const BUGS = [], SPORES = [];
+  let lastT = null;
+  function solo(x, y) { return groundAt(x, y) > -900; }
+  function atualizar(dt) {
+    const px = P.x, py = P.y;
+    // ácaros: mantém ~22 por perto do jogador; perambulam pelo ruído e fogem quando ele se aproxima
+    while (BUGS.length < 22) { const a = Math.random() * TAU, d = 300 + Math.random() * 700, x = px + Math.cos(a) * d, y = py + Math.sin(a) * d; if (solo(x, y)) BUGS.push({ x, y, h: Math.random() * TAU, sp: 18 + Math.random() * 20, ph: Math.random() * 100, s: 0.7 + Math.random() * 0.6 }); else break; }
+    for (let i = BUGS.length - 1; i >= 0; i--) {
+      const b = BUGS[i]; b.ph += dt;
+      const dx = b.x - px, dy = b.y - py, d = Math.hypot(dx, dy);
+      if (d > 1400) { BUGS.splice(i, 1); continue; }
+      let want = b.h + n2(b.ph * 0.4, i * 7.1) * 2.2 * dt, sp = b.sp;
+      if (d < 170) { want = Math.atan2(dy, dx); sp = b.sp * 4.5; } // foge
+      b.h = want; const nx = b.x + Math.cos(b.h) * sp * dt, ny = b.y + Math.sin(b.h) * sp * dt;
+      if (solo(nx, ny) && Math.abs(liftAt(nx, ny) - liftAt(b.x, b.y)) < 6) { b.x = nx; b.y = ny; b.walk = (b.walk || 0) + sp * dt; } else b.h += Math.PI * (0.5 + Math.random());
+    }
+    // esporos luminosos: sobem devagar e oscilam; nascem perto de flora nervosa ou ao acaso
+    while (SPORES.length < 46) { const a = Math.random() * TAU, d = Math.random() * 900; SPORES.push({ x: px + Math.cos(a) * d, y: py + Math.sin(a) * d, z: Math.random() * 60, t: 0, life: 6 + Math.random() * 8, ph: Math.random() * 100, hue: Math.random() < 0.7 ? 0 : 1 }); }
+    for (let i = SPORES.length - 1; i >= 0; i--) { const s = SPORES[i]; s.t += dt; s.ph += dt; s.z += dt * 7; s.x += n2(s.ph * 0.3, i) * 12 * dt; s.y += n2(i, s.ph * 0.3) * 12 * dt; if (s.t > s.life || Math.hypot(s.x - px, s.y - py) > 1200) SPORES.splice(i, 1); }
+  }
+  function drawBug(b) {
+    const lift = liftAt(b.x, b.y), x = SX(b.x, b.y), y = SY(b.x, b.y, lift), s = b.s, w = b.walk || 0;
+    const ang = Math.atan2(Math.sin(b.h) + Math.cos(b.h), (Math.cos(b.h) - Math.sin(b.h)) * 2); // direção projetada no isométrico
+    ctx.save(); ctx.translate(x, y); ctx.scale(1, 0.62); ctx.rotate(ang);
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(0, 3, 7 * s, 4 * s, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = '#2a0a08'; ctx.lineWidth = 1.1;
+    for (let k = 0; k < 3; k++) for (const sd of [-1, 1]) { const sw = Math.sin(w * 0.35 + k * 2 + (sd > 0 ? Math.PI : 0)) * 1.6; ctx.beginPath(); ctx.moveTo((k - 1) * 2.6 * s, 0); ctx.lineTo((k - 1) * 3.4 * s + sw, sd * 6.5 * s); ctx.stroke(); }
+    const gr = ctx.createRadialGradient(-1, -1.5, 0.5, 0, 0, 5.5 * s); gr.addColorStop(0, '#b2463a'); gr.addColorStop(0.6, '#5a140e'); gr.addColorStop(1, '#1e0504');
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.ellipse(0, 0, 5.5 * s, 4 * s, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#1e0504'; ctx.beginPath(); ctx.ellipse(5.4 * s, 0, 2 * s, 1.6 * s, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(255,220,200,.45)'; ctx.beginPath(); ctx.ellipse(-1.2 * s, -1.6 * s, 1.6 * s, 0.8 * s, 0, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+  // moscas: enxame em torno de árvores de vasos e poças (só o que está em cena)
+  function drawFlies(p) {
+    const lift = liftAt(p.x, p.y), x = SX(p.x, p.y), y = SY(p.x, p.y, lift) - p.h * 0.55, t = G.t, seed = hash2(p.x | 0, p.y | 0) * 50;
+    ctx.fillStyle = 'rgba(20,8,8,.85)';
+    for (let i = 0; i < 7; i++) { const a = t * (2.2 + i * 0.37) + seed + i, r = 10 + 14 * (0.5 + 0.5 * n2(t * 0.6 + i, seed)); const fx = x + Math.cos(a) * r * 1.4, fy = y + Math.sin(a * 1.3) * r * 0.6;
+      ctx.fillRect(fx - 1, fy - 1, 2, 2); ctx.fillStyle = 'rgba(200,190,180,.35)'; ctx.fillRect(fx - 2 + Math.sin(t * 60 + i) , fy - 2, 1.5, 1); ctx.fillStyle = 'rgba(20,8,8,.85)'; }
+  }
+  function empilhar(pushItem, inView) {
+    const now = G.t; const dt = lastT == null ? 0 : clamp(now - lastT, 0, 0.05); lastT = now;
+    if (G.started && !G.paused) atualizar(dt);
+    for (const b of BUGS) if (inView(b.x, b.y, 40)) pushItem(b.x + b.y - 0.5, drawBug, b);
+    for (const p of G.props) if ((p.art === 'tree' || p.art === 'tree2' || p.art === 'pool' || p.art === 'geyser') && inView(p.x, p.y, 120)) pushItem(p.x + p.y + 0.5, drawFlies, p);
+  }
+  // esporos: desenhados no modo aditivo, depois da luz (brilham no escuro)
+  function brilhos() {
+    for (const s of SPORES) {
+      const k = Math.min(1, s.t / 1.5, (s.life - s.t) / 1.5), x = SX(s.x, s.y), y = SY(s.x, s.y, liftAt(s.x, s.y) + s.z), r = 2.2 + Math.sin(s.ph * 3) * 0.6;
+      ctx.globalAlpha = 0.55 * k; ctx.fillStyle = s.hue ? '#ffd27a' : '#ff6a4a';
+      ctx.beginPath(); ctx.arc(x, y, r * 2.6, 0, TAU); ctx.globalAlpha = 0.14 * k; ctx.fill();
+      ctx.globalAlpha = 0.7 * k; ctx.beginPath(); ctx.arc(x, y, r * 0.8, 0, TAU); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  root.MapaVida = { tingirTerreno, texturizarOsso, desenharProp, empilhar, brilhos, poisson };
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
 <script>/* guerreiro-imagens.js */
 /* Imagens geradas no Canva para o Guerreiro Ósseo (embutidas para funcionar num único HTML). */
 window.GUERREIRO_IMAGENS = Object.assign(window.GUERREIRO_IMAGENS || {}, {
@@ -2534,7 +3273,7 @@ function buildTerrain() {
     const id = i * NY + j, z = baseZ(r, wx, wy), n1 = vnoise(wx * .02, wy * .02), n2 = vnoise(wx * .0055 + 7.3, wy * .0055 + 3.1);
     let c;
     if (r.type === 'finger') { c = sampleTex('muscle', wx, wy) || [120, 40, 44]; c = c.map(v => v * (.56 + n2 * .12)); }
-    else if (r.type === 'fossa') c = [66 + n1 * 26 + n2 * 14, 100 + n1 * 22, 68 + n1 * 16];
+    else if (r.type === 'fossa') c = window.MapaVida ? [86 + n1 * 26 + n2 * 14, 40 + n1 * 14, 58 + n1 * 18] : [66 + n1 * 26 + n2 * 14, 100 + n1 * 22, 68 + n1 * 16];
     else if (r.type === 'carpal') { c = sampleTex('bone', wx, wy) || [150, 130, 100]; c = c.map(v => v * (.44 + n2 * .14)); }
     else {
       const k = clamp(z / 46, 0, 1);
@@ -2566,9 +3305,9 @@ function buildTerrain() {
       if (mh) { const m = mh.m, seam = mh.e > .8 ? (mh.e - .8) / .2 : 0; c = (m.apon ? mix3(c, m.col, .38 * (1 - mh.u * .5)) : mix3(c, m.col, .78)).map(v => v * (1 - .4 * seam)); if (!m.apon) hz[id] += (m.lumb != null ? 2.5 : 6) * (1 - mh.e * mh.e); } }
     { const vd = vesselDist(wx, wy); if (vd.v && vd.d < vd.v.w * .8 * MS / 2.45) { c = mix3(c, [56, 6, 12], .75); hz[id] -= 2; } }
     let dT = 1e9; for (let k = 0; k < TEND.length; k++) { const bx = tendBox[k]; if (wx < bx[0] || wy < bx[1] || wx > bx[2] || wy > bx[3]) continue; dT = Math.min(dT, polyDist(wx, wy, TEND[k])); }
-    if (dT < 12) { c = mix3(c, [214, 202, 172], .85 + .15 * (1 - dT / 12)); hz[id] += 3 * (1 - dT / 12); }
+    if (dT < 12) { c = window.MapaVida ? mix3(c, [96, 40, 40], .35) : mix3(c, [214, 202, 172], .85 + .15 * (1 - dT / 12)); hz[id] += 3 * (1 - dT / 12); }
     { const so = ((j / 3) | 0) % 2 ? 1 : 0, sa = Math.floor((i + so) / 3), sb = Math.floor(j / 3), sh = hash2(sa * 7 + 3, sb * 13 + 5), fl = r.type === 'finger' ? .35 : 1;
-      const k = 1 + (sh - .5) * .22 * fl; c = [c[0] * k, c[1] * k, c[2] * k]; if (r.type !== 'finger' && !glow[id]) hz[id] += sh * 3.2; }
+      const k = window.MapaVida ? 1 + (vnoise(wx * .021, wy * .021) - .5) * .14 : 1 + (sh - .5) * .22 * fl; c = [c[0] * k, c[1] * k, c[2] * k]; if (r.type !== 'finger' && !glow[id] && !window.MapaVida) hz[id] += sh * 3.2; }
     CR[id] = c[0]; CG[id] = c[1]; CB[id] = c[2];
   }
   const Hh = (i, j, d) => (i < 0 || j < 0 || i >= NX || j >= NY || !has[i * NY + j]) ? d : hz[i * NY + j];
@@ -2603,7 +3342,7 @@ function buildTerrain() {
     } else { const dh = h - Math.min(Hh(i + 1, j, h), Hh(i, j + 1, h)); if (dh > .6) { const drop = Math.max(6, dh + 2); tpoly([cx - hw, cy, cx + hw, cy, cx + hw, cy + hh + drop, cx - hw, cy + hh + drop], rgbs(cf, f * .55)); } }
     tpoly([cx, cy - hh - .6, cx + hw + .7, cy, cx, cy + hh + .7, cx - hw - .7, cy], rgbs(c, f, add));
     { const rt = REGIONS[RT[id]].type, so = ((j / 3) | 0) % 2 ? 1 : 0, ji = (i + so) % 3 === 0, jj = j % 3 === 0, sa = Math.floor((i + so) / 3), sb = Math.floor(j / 3), sh = hash2(sa * 7 + 3, sb * 13 + 5);
-      if (rt !== 'finger') {
+      if (rt !== 'finger' && !window.MapaVida) {
         if (ji) { tline([cx - hw, cy, cx, cy - hh], 'rgba(20,4,6,.55)', 1.6); tline([cx - hw + 1, cy + 1.2, cx + 1, cy - hh + 1.2], 'rgba(255,170,140,.16)', 1); }
         if (jj) { tline([cx, cy - hh, cx + hw, cy], 'rgba(20,4,6,.5)', 1.6); tline([cx, cy - hh + 1.2, cx + hw, cy + 1.2], 'rgba(255,170,140,.12)', 1); }
         if (sh < .2 && ji === false && jj === false && hash2(i * 3 + 1, j * 5 + 2) < .35) { const a = hash2(i, j) * 6.28; tline([cx - Math.cos(a) * hw * .6, cy - Math.sin(a) * hh * .6, cx + Math.cos(a) * hw * .5, cy + Math.sin(a) * hh * .5], 'rgba(15,2,4,.55)', 1); }
@@ -2622,6 +3361,7 @@ function buildTerrain() {
     g.setTransform(ISO_K, ISO_K * .5, -ISO_K, ISO_K * .5, ISO_OX - t.c * TILE, ISO_OY - t.r * TILE);
     const q = [[0, 0], [TILE, 0], [0, TILE], [TILE, TILE]].map(([sx, sy]) => screenToWorld(sx + t.c * TILE, sy + t.r * TILE));
     const xs = q.map(v => v.x), ys = q.map(v => v.y); g.fillStyle = pat; g.fillRect(Math.min(...xs) - 200, Math.min(...ys) - 200, Math.max(...xs) - Math.min(...xs) + 400, Math.max(...ys) - Math.min(...ys) + 400); g.restore(); }
+  if (window.MapaVida) MapaVida.tingirTerreno({ tiles, TILE, ISO_K, ISO_OX, ISO_OY, screenToWorld, isoX, isoY, liftAt, groundAt, regionAt, tileCtx, TCOLS, TROWS, WORLD_W, WORLD_H, TEND });
   // 2) ossos voxel (mesmo padrão para todos) — cada osso em sua própria tela,
   // ordenado em profundidade junto com os sprites (quem está atrás fica oculto)
   const cells = [];
@@ -2657,6 +3397,7 @@ function buildTerrain() {
     }
     // contorno inferior escuro (assenta o osso no chão)
     b.cells = null;
+    if (window.MapaVida) MapaVida.texturizarOsso(cv);
   }
 }
 // osso cuja área cobre (x,y) — para ordenar efeitos de chão sobre ossos
@@ -2720,7 +3461,7 @@ function buildMiniBase() {
   for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
     const wx = (x + .5) / sx, wy = (y + .5) / sy, k = hIdx(wx, wy), o = (y * c.width + x) * 4;
     if (k < 0 || HM[k] < -900) continue;
-    const r = REGIONS[HR[k]]; let col = r.type === 'hill' ? [120, 40, 46] : r.type === 'fossa' ? [52, 80, 56] : r.type === 'carpal' ? [92, 80, 64] : [86, 30, 34];
+    const r = REGIONS[HR[k]]; let col = r.type === 'hill' ? [120, 40, 46] : r.type === 'fossa' ? (window.MapaVida ? [78, 36, 52] : [52, 80, 56]) : r.type === 'carpal' ? [92, 80, 64] : [86, 30, 34];
     if (HBONE[k] >= 0) col = [206, 190, 150];
     img.data[o] = col[0]; img.data[o + 1] = col[1]; img.data[o + 2] = col[2]; img.data[o + 3] = 255;
   }
@@ -4503,6 +5244,7 @@ function drawChest(c) {
     ctx.fillStyle = '#7a0a14'; ctx.beginPath(); ctx.arc(x, y - 20, 7 + Math.sin(G.t * 4), 0, 6.283); ctx.fill(); ctx.strokeStyle = '#ffcf8a'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore(); }
 }
 function drawProp(p) {
+  if (window.MapaVida && MapaVida.desenharProp(p)) return;
   const lift = liftAt(p.x, p.y), x = SX(p.x, p.y), y = SY(p.x, p.y, lift);
   shadowAt(x, y + 2, p.h * .28, p.h * .1, 0.5);
   const hv = hash2(p.x | 0, p.y | 0), VEG = { tree: hv < .5 ? 'veg_tree0' : 'veg_tree1', tree2: hv < .5 ? 'veg_tree1' : 'veg_tree0',
@@ -4822,6 +5564,7 @@ function render() {
   for (const l of G.loot) if (inView(l.x, l.y, 60)) pushItem(l.x + l.y - 1, drawLoot, l);
   for (const e of G.enemies) { if (inView(e.x, e.y, 260)) pushItem(e.x + e.y, drawEnemy, e); else e.scrX = null; }
   pushItem(P.x + P.y, drawPlayer, null);
+  if (window.MapaVida) MapaVida.empilhar(pushItem, inView);
   for (const p of G.projs) if (inView(p.x, p.y, 80)) pushItem(p.x + p.y + 1, drawProj, p);
   ORDER.length = 0; for (let i = 0; i < itemsN; i++) ORDER.push(ITEMS[i]);
   ORDER.sort(byKey); for (let i = 0; i < ORDER.length; i++) ORDER[i][1](ORDER[i][2]);
@@ -4834,6 +5577,7 @@ function render() {
   for (const p of G.parts) if (p.add) drawPart(p, true);
   for (const p of G.projs) drawProjAdd(p);
   drawArtWorldFX();
+  if (window.MapaVida) MapaVida.brilhos();
   ctx.globalCompositeOperation = 'source-over';
   drawVesselGlow(camX, camY, W, H);
   for (const s of G.slashes) drawSlash(s);
