@@ -55,6 +55,31 @@ O brilho de raridade da arma (Comum, Mágico, Raro, Lendário) usa as cores de `
 - **Temas de cor:** Carmesim, Real (roxo e ouro), Peste (verde) e Obsidiana (cinza e prata). Eles mudam o tecido, o escudo, os detalhes dourados, a gema que brilha no cinto e nas ombreiras e a cor do contraluz. Use `heroi.setTheme('real')` ou `GuerreiroOsseo.create({ theme: 'peste' })`.
 - **Desempenho:** cada textura é pré-iluminada em 10 níveis de luz, então cada face exige uma única pintura. No tamanho do jogo (escala 72) o nível de detalhe cai automaticamente. Num Chromium sem placa de vídeo, o desenho levou cerca de 13 ms por quadro no tamanho do jogo e cerca de 32 ms no zoom grande. Com placa de vídeo deve ser mais rápido, mas isso não foi medido.
 
+## Versão 3: armas, conjuntos de golpes e visual inspirado em Diablo IV
+
+**Armas.** Escolha com `heroi.setWeapon('espada' | 'lanca' | 'foice', comEscudo)`. Cada arma tem empunhadura, IK das duas mãos e golpes próprios:
+
+Arma | Golpe ×3 (J) | 1 | 2 | 4
+---|---|---|---|---
+Espada de fêmur | Corte diagonal, revés, estocada | Esmagar Trabecular | Investida Patelar | Redemoinho Articular
+Lança vertebral | Estocada, varredura, estocada longa com avanço | Salto Empalador (pulo e cravada) | Carga da Lança | Giro da Haste
+Foice longa | Ceifa larga, ceifa ascendente, ceifa giratória 360° | Ceifa do Juízo | Passo Sombrio (avanço e ceifa) | Turbilhão da Ceifa
+
+- **Lança:** sem escudo, é usada com as duas mãos; com escudo, a pegada é por cima, estilo hoplita. A ponta tem fitas de tecido com física.
+- **Foice:** sempre usada com as duas mãos, sem escudo.
+- **Escudo** (espada e lança): **Golpe de Escudo** (tecla 5) e **Bloquear** (segurar B, `play('bloquear')` / `release('bloquear')`).
+
+**Rosto e armadura:**
+- **Rosto:** pele curtida, órbitas fundas com olhos em brasa, sobrancelhas franzidas, nariz modelado, cicatriz costurada e lágrimas de sangue.
+- **Elmo:** ferro negro aberto com faixa dourada na testa, protetor nasal, chifres curvos com anéis, crista de vértebras e máscara de maxilar com dentes.
+- **Couraça:** placas escuras com arabescos gravados, rebites, desgaste e ferrugem; costelas em relevo; bandoleira de couro com fivela; espinha nas costas; cinto dourado com fivela-crânio.
+- **Ombreiras:** três lâminas sobrepostas, chifres de osso e uma caveira com gema.
+- **Gola:** pele, com gorjal de placa.
+- **Membros:** cotoveleiras e joelheiras com espigões, tassetes em lâminas, braçadeiras e grevas de osso com tiras de couro.
+- **Sangue seco:** respingos e escorridos na lâmina, na armadura, na capa e no escudo.
+
+**Desempenho.** De perto, o modelo usa mais polígonos. No tamanho do jogo, os detalhes minúsculos (espigões, crista, nariz) somem sozinhos. Medido num Chromium sem placa de vídeo: cerca de 15 ms por quadro na escala 74 e cerca de 55 ms na escala 150.
+
 ## Como ligar no jogo
 
 1. Cole o conteúdo de `guerreiro-osseo.js` em um `<script>` antes do script principal do jogo.
@@ -72,7 +97,7 @@ if (P.cls.id === 'guerreiro' && window.GuerreiroOsseo && !P.dead) {
 }
 ```
 
-`syncFromGame` lê `P.artAction`, `P.combo`, `P.roll`, `P.hurtT`, `P.dead`, `P.walk` e `P.dirX/dirY`, que já existem no jogo. A escala `72` deixa o herói com cerca de 118 px de altura, o mesmo tamanho do sprite atual.
+`syncFromGame` também escolhe a arma pelo nome do item equipado (Foice → foice, Lança → lança, o resto → espada). Ele lê `P.artAction`, `P.combo`, `P.roll`, `P.hurtT`, `P.dead`, `P.walk` e `P.dirX/dirY`, que já existem no jogo. A escala `72` deixa o herói com cerca de 118 px de altura, o mesmo tamanho do sprite atual.
 
 ## Sugestões para o resto do visual (em ordem de impacto)
 

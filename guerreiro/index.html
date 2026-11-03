@@ -33,6 +33,7 @@ input[type=range]{width:100%;accent-color:#b98a45}
 #joy{position:fixed;left:22px;bottom:calc(22px + env(safe-area-inset-bottom,0px));width:124px;height:124px;border-radius:50%;border:1px solid rgba(185,138,69,.55);background:radial-gradient(circle,rgba(0,0,0,.15),rgba(0,0,0,.45));z-index:6;display:none}
 #joy i{position:absolute;left:50%;top:50%;width:52px;height:52px;margin:-26px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#ffe3a3,#b98a45 55%,#4a2f12);box-shadow:0 0 0 2px #000}
 #acts{position:fixed;right:16px;bottom:calc(18px + env(safe-area-inset-bottom,0px));display:none;grid-template-columns:repeat(3,58px);gap:8px;z-index:6}
+.btn.sh[disabled]{opacity:.35}
 #acts button{width:58px;height:58px;border-radius:50%;font-family:var(--fs);font-size:9px;font-weight:700;letter-spacing:.04em;color:#f4e2bb;background:radial-gradient(circle at 40% 30%,#6a3a2c,#2a1513 70%);border:1px solid #9a6d3a;box-shadow:0 0 0 2px #000,inset 0 1px 0 rgba(255,220,160,.25)}
 #acts button.big{background:radial-gradient(circle at 40% 30%,#b8262f,#4a0a10 70%)}
 @media (pointer:coarse){#joy{display:block}#acts{display:grid}#panel{width:220px;padding:10px}#panel:not(.open) .body{display:none}#inset{display:none}}
@@ -44,15 +45,27 @@ input[type=range]{width:100%;accent-color:#b98a45}
 <div id="panel" class="frame">
   <button id="toggle" aria-label="Mostrar ou esconder o painel">☰</button>
   <h1>Guerreiro Ósseo</h1>
-  <p class="sub">Ortopedista de Guerra · malhas texturizadas 2.5D</p>
+  <p class="sub">Ortopedista de Guerra · espada, lança, foice e escudo</p>
   <div class="body">
-    <div class="lbl">Habilidades</div>
+    <div class="lbl">Arma</div>
+    <div class="row" id="wpn">
+      <button class="btn on" data-w="espada">Espada</button>
+      <button class="btn" data-w="lanca">Lança</button>
+      <button class="btn" data-w="foice">Foice longa</button>
+      <button class="btn on" id="shieldBtn">Escudo</button>
+    </div>
+    <div class="lbl">Golpes da arma <span style="opacity:.6">(Q troca a arma)</span></div>
     <div class="row">
-      <button class="btn" data-act="golpe">Golpe Cortical<kbd>J</kbd></button>
-      <button class="btn" data-act="esmagar">Esmagar<kbd>1</kbd></button>
-      <button class="btn" data-act="investida">Investida<kbd>2</kbd></button>
+      <button class="btn" data-act="golpe"><span data-name="golpe">Golpe</span> ×3<kbd>J</kbd></button>
+      <button class="btn" data-act="esmagar"><span data-name="esmagar">Esmagar</span><kbd>1</kbd></button>
+      <button class="btn" data-act="investida"><span data-name="investida">Investida</span><kbd>2</kbd></button>
+      <button class="btn" data-act="redemoinho"><span data-name="redemoinho">Redemoinho</span><kbd>4</kbd></button>
+    </div>
+    <div class="lbl">Escudo e gerais</div>
+    <div class="row">
+      <button class="btn sh" data-act="escudo">Golpe de Escudo<kbd>5</kbd></button>
+      <button class="btn sh" id="blockBtn">Bloquear (segurar)<kbd>B</kbd></button>
       <button class="btn" data-act="brado">Brado<kbd>3</kbd></button>
-      <button class="btn" data-act="redemoinho">Redemoinho<kbd>4</kbd></button>
       <button class="btn" data-act="rolar">Esquiva<kbd>Espaço</kbd></button>
       <button class="btn" data-act="dano">Dano<kbd>H</kbd></button>
       <button class="btn" data-act="morte">Morte / Reviver<kbd>K</kbd></button>
@@ -85,6 +98,7 @@ input[type=range]{width:100%;accent-color:#b98a45}
 <div id="acts">
   <button data-act="esmagar">Esmagar</button><button data-act="investida">Investida</button><button data-act="brado">Brado</button>
   <button data-act="rolar">Esquiva</button><button data-act="redemoinho">Rede-moinho</button><button data-act="golpe" class="big">Golpe</button>
+  <button data-act="escudo">Escudo</button><button id="blockT">Bloq.</button><button id="swapT">Trocar arma</button>
 </div>
 
 <script src="guerreiro-osseo.js"></script>
@@ -106,15 +120,34 @@ input[type=range]{width:100%;accent-color:#b98a45}
     if (hero.dead) return;
     const d = hero.play(name);
     if (!d) return;
-    if (name === 'rolar') st.dash = { t: d, v: 5.5 };
-    if (name === 'investida') st.dash = { t: d * 0.85, v: 7 };
+    const def = hero.action && hero.action.def;
+    if (def && def.dash) st.dash = { t: d * (name === 'rolar' ? 1 : 0.85), v: def.dash };
   };
+  const ORDER = ['espada', 'lanca', 'foice'];
+  const setW = w => {
+    hero.setWeapon(w, w === 'foice' ? false : st.shield);
+    document.querySelectorAll('#wpn [data-w]').forEach(b => b.classList.toggle('on', b.dataset.w === w));
+    const shOk = GuerreiroOsseo.WEAPONS[w].shieldOk;
+    document.getElementById('shieldBtn').classList.toggle('on', hero.shield); document.getElementById('shieldBtn').disabled = !shOk;
+    document.querySelectorAll('.btn.sh').forEach(b => b.disabled = !hero.shield);
+    document.querySelectorAll('[data-name]').forEach(sp => sp.textContent = hero.moveName(sp.dataset.name));
+  };
+  st.shield = true;
+  document.querySelectorAll('#wpn [data-w]').forEach(b => b.addEventListener('click', () => setW(b.dataset.w)));
+  document.getElementById('shieldBtn').addEventListener('click', () => { st.shield = !st.shield; setW(hero.weapon); });
+  const swap = () => setW(ORDER[(ORDER.indexOf(hero.weapon) + 1) % 3]);
+  document.getElementById('swapT').addEventListener('pointerdown', e => { e.preventDefault(); swap(); });
+  const block = on => on ? hero.play('bloquear') : hero.release('bloquear');
+  for (const id of ['blockBtn', 'blockT']) { const b = document.getElementById(id); b.addEventListener('pointerdown', e => { e.preventDefault(); block(true); }); for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, () => block(false)); }
+  setW('espada');
   addEventListener('keydown', e => {
     const k = e.key.toLowerCase(); st.keys[k] = true;
-    const m = { j: 'golpe', '1': 'esmagar', '2': 'investida', '3': 'brado', '4': 'redemoinho', ' ': 'rolar', h: 'dano', k: 'morte' }[k];
+    const m = { j: 'golpe', '1': 'esmagar', '2': 'investida', '3': 'brado', '4': 'redemoinho', '5': 'escudo', ' ': 'rolar', h: 'dano', k: 'morte' }[k];
     if (m && !e.repeat) { ACT(m); e.preventDefault(); }
+    if (k === 'q' && !e.repeat) swap();
+    if (k === 'b' && !e.repeat) block(true);
   });
-  addEventListener('keyup', e => { st.keys[e.key.toLowerCase()] = false; });
+  addEventListener('keyup', e => { const k = e.key.toLowerCase(); st.keys[k] = false; if (k === 'b') block(false); });
   cv.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse') ACT('golpe'); });
   document.querySelectorAll('[data-act]').forEach(b => b.addEventListener('pointerdown', e => { e.preventDefault(); ACT(b.dataset.act); }));
   document.querySelectorAll('#rar .btn').forEach(b => b.addEventListener('click', () => { document.querySelectorAll('#rar .btn').forEach(x => x.classList.remove('on')); b.classList.add('on'); st.rar = b.dataset.r; }));
@@ -169,7 +202,7 @@ input[type=range]{width:100%;accent-color:#b98a45}
     else if (moving) { const d = screenDirToWorld(mx, my); facing = Math.atan2(d[1], d[0]); vx = d[0] * 2.6; vy = d[1] * 2.6; }
     if (st.spin && !moving) facing = hero.facing + dt * 1.1;
     const act = hero.action && hero.action.name;
-    if (hero.dead || act === 'esmagar' || act === 'brado' || act === 'golpe3') { vx = vy = 0; moving = false; }
+    if (hero.dead || hero.still() || act === 'bloquear') { vx = vy = 0; moving = false; }
     if (st.dash && st.dash.t > 0) { st.dash.t -= dt; vx = Math.cos(hero.facing) * st.dash.v; vy = Math.sin(hero.facing) * st.dash.v; moving = act === 'investida'; }
     if (act === 'redemoinho') { vx *= 0.6; vy *= 0.6; }
     st.x += vx * dt; st.y += vy * dt;
