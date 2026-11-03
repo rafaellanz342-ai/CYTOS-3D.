@@ -265,6 +265,18 @@ Para regenerar: `MH_ALVOS=… MH_PESOS=…/weights.game_engine.json python3 tool
 
 Próximos candidatos: reduzir a resolução interna da iluminação e do *bloom*, e limitar efeitos aditivos simultâneos.
 
+## Versão 12: só espada, lança e foice no jogo; metal do Canva
+
+**Armas do Guerreiro no jogo** (`tools/integrar_jogo.py`):
+- **Lista própria:** `ARMAS_GUERREIRO` com 15 armas: 7 espadas (lâminas e o espadão), **4 lanças novas** (Lança Vertebral, Pique Tibial, Lança do Rádio, Lança da Diáfise Femoral, com o ícone vertebral) e 4 foices.
+- **Criação de armas:** `makeItem` passa a sortear o Guerreiro só dessa lista, e isso vale para todo saque, baú e recompensa. Testado com 300 armas geradas: 135 espadas, 87 lanças e 78 foices, nenhuma de outro tipo.
+- **Lendária:** "Martelo do Capitato" vira **"Lança do Capitato"** (mesmo poder: Esmagar Trabecular com área 40% maior).
+- **Presente inicial:** uma de cada tipo (Espadão Osteocortical, Lança Vertebral, Foice de Ranvier).
+- **Equipar:** o jogo bloqueia outras armas para o Guerreiro ("O Guerreiro usa só espada, lança ou foice"). Em salvamentos antigos, a arma proibida equipada vira uma espada e as proibidas saem do inventário.
+- **Modelo 3D:** troca sozinho para a lança ou a foice conforme o nome da arma equipada (`syncFromGame`).
+
+**Canva:** a textura de **metal gravado** (arabescos góticos, rebites, sangue) entrou na couraça, nas placas e no ferro (`assets/metal-canva.jpg`, montado por `tools/montar_imagens.py`). Osso, couro, pele e tecido ficaram pendentes por limite de créditos do Canva. Quando forem gerados, basta salvar `assets/<chave>-canva.jpg` e rodar o script.
+
 ## Como ligar no jogo
 
 1. Cole o conteúdo de `guerreiro-osseo.js` em um `<script>` antes do script principal do jogo.

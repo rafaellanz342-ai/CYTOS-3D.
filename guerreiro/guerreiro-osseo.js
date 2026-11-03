@@ -812,7 +812,7 @@
     };
     T.cape = cloth(true, false); T.cloth = cloth(false, false); T.clothIn = cloth(false, true);
     // couraça: placa escura gravada + caixa torácica em relevo + bandoleira + espinha + cinto
-    [c, g] = mkCanvas(512, 256); R = rng(71); paintMetal(g, 512, 256, R, '#3a363c', {});
+    [c, g] = mkCanvas(512, 256); R = rng(71); paintMetal(g, 512, 256, R, '#3a363c', {}); overlayImg(g, 512, 256, 'metal', 0.75, null, 128); // placa gravada do Canva por baixo das costelas
     const W2 = 512, H2 = 256, zTop = 0.61, zBot = -0.08;
     const U = a => (a / TAU + 0.5) * W2, V = z => (zTop - z) / (zTop - zBot) * H2;
     const bonePat = g.createPattern(T.bone, 'repeat');

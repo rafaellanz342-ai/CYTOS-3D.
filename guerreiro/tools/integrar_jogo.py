@@ -57,6 +57,33 @@ patch("if (dT < 12) { c = mix3(c, [214, 202, 172], .85 + .15 * (1 - dT / 12)); h
 # minimapa: a mesma cor da tabaqueira
 patch("r.type === 'fossa' ? [52, 80, 56] :", "r.type === 'fossa' ? (window.MapaVida ? [78, 36, 52] : [52, 80, 56]) :")
 
+# --- armas do Guerreiro: só espada, lança e foice (as três com conjunto de golpes no Guerreiro Ósseo) ---
+patch("function makeItem(ilvl, rarity, slot, legendary, chosenBase) {\n",
+"""// Guerreiro: só as três armas que têm conjunto de golpes próprio no Guerreiro Ósseo. Lanças usam o ícone vertebral.
+const ARMAS_GUERREIRO = [
+  ['Lâmina Periosteal', 'w_blade1', 'Espada', 1], ['Gládio Cortical', 'w_blade2', 'Espada', 1.02], ['Lâmina Hemorrágica', 'w_blade1_blood', 'Espada', 1.06],
+  ['Espada da Diáfise', 'nw_0', 'Espada', 1], ['Serra Cortical', 'nw_1', 'Espada', 1.08], ['Lâmina Hemática', 'nw_2', 'Espada', 1.1], ['Espadão Osteocortical', 'nw_30', 'Espada', 1.15],
+  ['Lança Vertebral', 'w_spine', 'Lança', 1.04], ['Pique Tibial', 'w_spine', 'Lança', 1.1], ['Lança do Rádio', 'w_spine', 'Lança', 1.08], ['Lança da Diáfise Femoral', 'w_spine', 'Lança', 1.16],
+  ['Foice Sináptica', 'nw_27', 'Foice', 1.08], ['Foice Mielínica', 'nw_28', 'Foice', 1.12], ['Foice de Ranvier', 'nw_29', 'Foice', 1.16], ['Foice da Condução Saltatória', 'nw_38', 'Foice', 1.18]
+];
+const armaGuerreiroOk = it => !it || it.slot !== 'arma' || /Lâmina|Gládio|Espada|Espadão|Serra|Lança|Pique|Foice/.test(it.name || '');
+function makeItem(ilvl, rarity, slot, legendary, chosenBase) {
+""")
+patch("  base = chosenBase || pick(BASES[baseKey]);",
+      "  base = chosenBase || (slot === 'arma' && cls.id === 'guerreiro' ? pick(ARMAS_GUERREIRO) : pick(BASES[baseKey]));")
+# a lendária do Guerreiro era um martelo: vira lança, com o mesmo poder
+patch("{ slot:'arma', cls:'guerreiro', name:'Martelo do Capitato', icon:'w_mace2',",
+      "{ slot:'arma', cls:'guerreiro', name:'Lança do Capitato', icon:'w_spine',")
+# presente inicial: uma de cada (espada, lança, foice)
+patch("const giftBases = NEW_WEAPONS.filter(w => w[4] === c.weaponBase).slice(-3);",
+      "const giftBases = c.id === 'guerreiro' ? [ARMAS_GUERREIRO[6], ARMAS_GUERREIRO[7], ARMAS_GUERREIRO[13]] : NEW_WEAPONS.filter(w => w[4] === c.weaponBase).slice(-3);")
+# salvamentos antigos: arma proibida equipada vira uma espada do mesmo nível; as proibidas no inventário saem
+patch("  P.weaponPack = sv && sv.weaponPack || [];\n",
+      "  P.weaponPack = sv && sv.weaponPack || [];\n  if (c.id === 'guerreiro') { if (!armaGuerreiroOk(P.equip.arma)) P.equip.arma = makeItem(Math.max(1, P.level || 1), 0, 'arma', null, ARMAS_GUERREIRO[0]); P.inv = (P.inv || []).filter(armaGuerreiroOk); }\n")
+# equipar: bloqueia outras armas
+patch("    if(it.cls && it.cls !== P.cls.id) { this.toast('Classe incompatível', 'Esta arma pertence a outra classe.', 'tip', 3); return; }",
+      "    if(it.cls && it.cls !== P.cls.id) { this.toast('Classe incompatível', 'Esta arma pertence a outra classe.', 'tip', 3); return; }\n    if (P.cls.id === 'guerreiro' && !armaGuerreiroOk(it)) { this.toast('Arma incompatível', 'O Guerreiro usa só espada, lança ou foice.', 'tip', 3); return; }")
+
 # --- recortes em cache dos atlas ---
 helper = """
 // Desempenho: recorte em cache de cada sprite dos atlas gigantes. Texturas acima de 4096 px caem para o desenho
