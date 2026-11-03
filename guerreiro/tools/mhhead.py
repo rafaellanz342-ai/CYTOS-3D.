@@ -1,5 +1,7 @@
 # Extrai a cabeça (pele, olhos e casca de cabelo) do modelo-base MakeHuman (CC0) e gera dados compactos para o módulo JS.
-import sys, json, math, collections
+import sys, json, math, collections, os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mhcommon
 src, out = sys.argv[1], sys.argv[2]
 V=[];groups=collections.OrderedDict();g=None
 for line in open(src):
@@ -8,13 +10,16 @@ for line in open(src):
     if p[0]=='v': V.append(tuple(map(float,p[1:4])))
     elif p[0]=='g': g=p[1]; groups.setdefault(g,[])
     elif p[0]=='f': groups[g].append([int(t.split('/')[0])-1 for t in p[1:]])
+if os.environ.get('MH_ALVOS'): mhcommon.apply_targets(V, mhcommon.warrior_targets(os.environ['MH_ALVOS']))
 def mean(ids): return [sum(V[i][k] for i in ids)/len(ids) for k in range(3)]
 eyeL=mean({i for f in groups['helper-l-eye'] for i in f}); eyeR=mean({i for f in groups['helper-r-eye'] for i in f})
-CUT=6.05
+NECKJ=mean({i for f in groups['joint-neck'] for i in f}) if 'joint-neck' in groups else None
+CUT=(NECKJ[1]+0.16) if NECKJ else 6.05   # um pouco acima da articulação do pescoço
 body=[f for f in groups['body'] if all(V[i][1]>CUT for i in f)]
 hv={i for f in body for i in f}
 # queixo: ponto frontal mais baixo próximo da linha média, acima do pescoço
-front=[i for i in hv if abs(V[i][0])<0.15 and V[i][2]>max(V[j][2] for j in hv)-0.9 and V[i][1]>6.3]
+ez=(eyeL[2]+eyeR[2])/2; ey0=(eyeL[1]+eyeR[1])/2
+front=[i for i in hv if abs(V[i][0])<0.15 and V[i][2]>ez-0.45 and ey0-1.8<V[i][1]<ey0-0.5]   # queixo: abaixo dos olhos e à frente do pescoço
 chin=min(front,key=lambda i:V[i][1]); chinY=V[chin][1]
 top=max(V[i][1] for i in hv)
 zs=[V[i][2] for i in hv if V[i][1]>7.0]; zc=(max(zs)+min(zs))/2
@@ -28,9 +33,14 @@ a=0.1667/ex; c=(0.84-0.287)/(chinY-ey)
 def uv(p):
     if p[2] < zc-0.15: return [round(0.04+0.02*math.sin(p[0]*3),4), round(0.5+0.3*math.tanh((p[1]-ey)*0.6),4)]
     return [round(0.5-p[0]*a,4), round(0.287+(p[1]-ey)*c,4)]
+EXPR=mhcommon.expression_deltas(os.environ['MH_EXPR']) if os.environ.get('MH_EXPR') else {}
 def pack(faces, ids_sel=None):
     ids=sorted({i for f in faces for i in f}); m={v:n for n,v in enumerate(ids)}
-    return {'v':[loc(V[i]) for i in ids],'uv':[uv(V[i]) for i in ids],'f':[[m[i] for i in f] for f in faces]}
+    ex={}
+    for nome,d in EXPR.items():   # deslocamentos esparsos por expressão, no referencial da cabeça [frente, lado, cima]
+        lst=[[n,round(d[i][2]*k,4),round(d[i][0]*k,4),round(d[i][1]*k,4)] for n,i in enumerate(ids) if i in d and max(abs(c) for c in d[i])>1e-3]
+        if lst: ex[nome]=lst
+    return {'ex':ex,'v':[loc(V[i]) for i in ids],'uv':[uv(V[i]) for i in ids],'f':[[m[i] for i in f] for f in faces]}
 # LOD baixo: agrupamento de vértices numa grade (≈ 1/14 da altura da cabeça)
 def decimate(faces, cell):
     rep={};cl={}

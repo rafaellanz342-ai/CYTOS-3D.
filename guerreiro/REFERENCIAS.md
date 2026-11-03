@@ -45,6 +45,8 @@ Para os itens bloqueados, basta baixar no seu computador e me enviar o arquivo. 
 
 ## Recomendação de ordem
 
+> Os itens 1, 2 e 3 já foram aplicados na versão 10 (ver `MELHORIAS.md`).
+
 1. **Corpo de guerreiro:** aplicar o alvo de musculatura ao corpo do atlas.
 2. **Pesos profissionais do MPFB2:** trocar os pesos heurísticos (melhora todas as articulações e a armadura moldada).
 3. **Expressões faciais** ligadas às ações (Brado, golpe, dano, morte).

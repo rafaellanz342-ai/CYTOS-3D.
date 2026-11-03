@@ -300,6 +300,7 @@
     this.theme = opts.theme || 'carmesim';
     this.armor = !!opts.armor; // sem armadura: corpo anatômico do atlas (MakeHuman) como base
     this.trail = []; this.fx = []; this.on = opts.on || null;
+    this.exprW = { carranca: 0.6 }; this.blinkT = 2; this.blinkOn = 0;
     this.weapon = 'espada'; this.shield = true;
     this.setWeapon(opts.weapon || 'espada', opts.shield);
   }
@@ -390,6 +391,16 @@
     this.tabB.step(J.tabBA, dt, shift, legs, wind, J.pel);
     if (J.tasselA) this.tassel.step(J.tasselA, dt, shift, [], mul(wind, 2), J.tip);
     this.hairStep(dt, shift, wind);
+    // rosto: a expressão segue a ação (esforço nos golpes, fúria no Brado, dor no dano, olhos fechados na morte) e pisca sozinho
+    { const tg = { carranca: 0.6, furia: 0, esforco: 0, dor: 0, morte: 0, piscar: 0 }, nm = a && a.name, kk = a ? clamp(a.t / a.dur, 0, 1) : 0;
+      if (nm === 'brado') tg.furia = 1;
+      else if (nm && /golpe|esmagar|investida|redemoinho|escudo/.test(nm)) tg.esforco = 0.45 + 0.55 * Math.sin(kk * Math.PI);
+      else if (nm === 'dano') tg.dor = 1;
+      if (this.rage > 0.05) tg.furia = Math.max(tg.furia, this.rage * 0.7);
+      this.blinkT -= dt; if (this.blinkT < 0) { this.blinkT = 2.5 + Math.random() * 3.5; this.blinkOn = 0.13; }
+      if (this.blinkOn > 0) { this.blinkOn -= dt; tg.piscar = 1; }
+      if (this.dead) { for (const k in tg) tg[k] = 0; tg.morte = 1; }
+      for (const k in tg) { const cur = this.exprW[k] || 0; this.exprW[k] = cur + (tg[k] - cur) * (1 - Math.exp(-dt * (k === 'piscar' ? 40 : 12))); } }
     // rastro da arma
     const tr = def && def.trail, an = a ? a.t / a.dur : 0;
     if (tr && an >= tr[0] && an <= tr[1]) this.trail.push({ tip: J.tip.slice(), mid: J.tmid.slice(), t: this.t });
@@ -460,7 +471,9 @@
       return add(c.a, add(add(mul(c.d, dot(q, r.d) * k), mul(c.e1, dot(q, r.e1))), mul(c.e2, dot(q, r.e2)))); };
     // malha com skinning: dois ossos por vértice; sombreamento suave pela média das normais de Newell dos vértices
     const skin = (Mx, texOf, uvOf, bias) => {
-      const W = Mx.v.map((p, i) => { const [b1, w, b2] = Mx.w[i]; return w >= 0.999 ? T(b1, p) : mix(T(b2, p), T(b1, p), w); });
+      const W = Mx.v.map((p, i) => { // até 3 ossos por vértice (pesos do rig "game engine" do MPFB2)
+        const ww = Mx.w[i]; if (ww.length === 3) return ww[1] >= 0.999 ? T(ww[0], p) : mix(T(ww[2], p), T(ww[0], p), ww[1]);
+        let r = mul(T(ww[0], p), ww[1]); if (ww[3] > 0.001) r = add(r, mul(T(ww[2], p), ww[3])); if (ww[5] > 0.001) r = add(r, mul(T(ww[4], p), ww[5])); return r; });
       const FN = Mx.f.map(fc => { let n = [0, 0, 0]; for (let k = 0; k < fc.length; k++) { const a = W[fc[k]], b = W[fc[(k + 1) % fc.length]]; n = add(n, [(a[1] - b[1]) * (a[2] + b[2]), (a[2] - b[2]) * (a[0] + b[0]), (a[0] - b[0]) * (a[1] + b[1])]); } return n; });
       const VN = Mx.v.map(() => [0, 0, 0]); Mx.f.forEach((fc, i) => fc.forEach(j => { VN[j] = add(VN[j], FN[i]); }));
       Mx.f.forEach((fc, i) => {
@@ -1164,12 +1177,16 @@
     if (CABD) {
       // malha anatômica (MakeHuman, CC0): vértices no referencial da cabeça, normais por face pré-calculadas
       const toV = n => add(add(mul(F, n[0]), mul(Sd, n[1])), mul(U, n[2]));
-      const meshLocal = (M, tex, bias, sc, off) => {
+      const meshLocal = (M, tex, bias, sc, off, VL) => {
         if (!M._n) M._n = M.f.map(fc => { const a = M.v[fc[0]], b = M.v[fc[1]], c2 = M.v[fc[2]]; return norm(cross(sub(b, a), sub(c2, a))); });
-        const k = sc || 1, o = off || [0, 0, 0], W = M.v.map(q => toW(add(mul(q, k), o)));
+        const k = sc || 1, o = off || [0, 0, 0], W = (VL || M.v).map(q => toW(add(mul(q, k), o)));
         M.f.forEach((fc, i) => face(fc.map(j => W[j]), fc.map(j => M.uv[j]), tex, toV(M._n[i]), { bias }));
       };
-      meshLocal(lowDetail ? CABD.baixa : CABD.alta, 'head', 0.006);
+      // expressões faciais: soma ponderada dos deslocamentos (unidades de expressão do MPFB2) sobre a malha da cabeça
+      const HM = lowDetail ? CABD.baixa : CABD.alta, EW = this.exprW; let VL = null;
+      if (HM.ex && EW) for (const nm in EW) { const w = EW[nm] * (nm === 'piscar' ? 1 : 1.6), D = HM.ex[nm]; if (!D || w < 0.01) continue; // 1,6×: legível de longe
+        if (!VL) VL = HM.v.map(q => q.slice()); for (const [n, dx, dy, dz] of D) { VL[n][0] += dx * w; VL[n][1] += dy * w; VL[n][2] += dz * w; } }
+      meshLocal(HM, 'head', 0.006, 1, null, VL);
       if (fine) for (const E of CABD.olhos) meshLocal(E, 'eye', 0.0055);
       if (!CABD._couro) { const keep = q => q[2] > 0.072 - 0.5 * Math.max(0, 0.06 - q[0]) || q[0] < -0.02; // linha do cabelo: testa livre, desce nas têmporas e na nuca
         const C2 = CABD.couro, f2 = C2.f.filter(fc => fc.every(j => keep(C2.v[j]))); CABD._couro = { v: C2.v, uv: C2.uv, f: f2 }; }

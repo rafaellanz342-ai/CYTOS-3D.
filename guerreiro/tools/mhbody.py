@@ -1,6 +1,8 @@
 # Gera o corpo (sem cabeça e sem mãos) a partir do modelo-base MakeHuman hm08 (CC0), com pesos de skinning
 # para o esqueleto do Guerreiro Ósseo. Uso: python3 mhbody.py base.obj guerreiro-corpo.js
-import sys, json, math, collections
+import sys, json, math, collections, os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mhcommon
 src, out = sys.argv[1], sys.argv[2]
 V=[];VT=[];G=collections.OrderedDict();g=None;FUV={}
 for line in open(src):
@@ -15,6 +17,9 @@ for line in open(src):
         G[g].append(f)
         for t in idx:
             if len(t)>1 and t[1]: FUV.setdefault(int(t[0])-1, int(t[1])-1)
+# físico de guerreiro (alvos CC0 do MakeHuman), aplicado na malha original antes do espelhamento
+if os.environ.get('MH_ALVOS'):
+    V0=[(-x,y,z) for x,y,z in V]; mhcommon.apply_targets(V0, mhcommon.warrior_targets(os.environ['MH_ALVOS'])); V=[(-x,y,z) for x,y,z in V0]
 J={}
 for k,f in G.items():
     if k.startswith('joint'):
@@ -47,9 +52,29 @@ for b in B:
 children=collections.defaultdict(list)
 for i,b in enumerate(B):
     if b[4] is not None: children[b[4]].append(i)
+# pesos profissionais do rig "game engine" do MPFB2 (CC0), convertidos para os nossos ossos
+PRO=None
+if os.environ.get('MH_PESOS'):
+    raw=json.load(open(os.environ['MH_PESOS']))['weights']; PRO=collections.defaultdict(dict)
+    def ours(bn):
+        sd=bn[-1] if bn[-2:] in ('_l','_r') else None
+        if bn in ('Root','pelvis'): return {'pelve':1}
+        if bn=='spine_01': return {'lombar':1}
+        if bn=='spine_02': return {'lombar':0.4,'torax':0.6}
+        if bn=='spine_03' or bn.startswith('clavicle'): return {'torax':1}
+        if bn in ('neck_01','head'): return {'pescoco':1}
+        if bn.startswith('upperarm'): return {'braco-'+sd:1}
+        if bn.startswith(('lowerarm','hand','thumb','index','middle','ring','pinky')): return {'antebraco-'+sd:1}
+        if bn.startswith('thigh'): return {'coxa-'+sd:1}
+        if bn.startswith('calf'): return {'canela-'+sd:1}
+        if bn.startswith(('foot','ball')): return {'pe-'+sd:1}
+        return {}
+    for bn,lst in raw.items():
+        for nm,k in ours(bn).items():
+            for vi,w in lst: PRO[vi][nm]=PRO[vi].get(nm,0)+w*k
 def segd(p,a,b):
     ab=sub(b,a); t=max(0,min(1,dot(sub(p,a),ab)/dot(ab,ab))); q=add(a,mul(ab,t)); return math.dist(p,q),t
-CUT_NECK=6.35
+CUT_NECK=P('neck')[1]+0.28   # corpo vai até logo abaixo da mandíbula (a cabeça vem de guerreiro-cabeca.js)
 def wrist_cut(p):
     for s in ('l','r'):
         a,b=P(s+'-elbow'),P(s+'-hand'); ab=sub(b,a); t=dot(sub(p,a),ab)/dot(ab,ab)
@@ -75,6 +100,13 @@ def weights(p):
         ch=[c for c in children[i] if not B[c][0].startswith('coxa') and not B[c][0].startswith('braco')]
         if ch: return [i,0.5+0.5*(1-t)/0.2,ch[0]]
     return [i,1,i]
+def wv(i):
+    if PRO is not None and PRO.get(i):
+        top=sorted(PRO[i].items(),key=lambda kv:-kv[1])[:3]; t=sum(w for _,w in top) or 1; out=[]
+        for nm,w in top: out+=[names.index(nm),round(w/t,3)]
+        while len(out)<6: out+=[out[0],0]
+        return out
+    a_,ww,b_=weights(V[i]); return [a_,round(ww,3),b_,round(1-ww,3),a_,0]
 def decimate(faces, cell):
     rep={};cl={}
     for f in faces:
@@ -96,9 +128,7 @@ def pack(faces):
     ids=sorted({i for f in faces for i in f}); m={v:n for n,v in enumerate(ids)}
     vv=[[round(c*K,4) for c in V[i]] for i in ids]
     uv=[[round(VT[FUV[i]][0],4), round(1-VT[FUV[i]][1],4)] if i in FUV else [0.5,0.5] for i in ids]
-    w=[]
-    for i in ids:
-        a,ww,b=weights(V[i]); w.append([a,round(ww,3),b])
+    w=[wv(i) for i in ids]
     # tecido simples na pelve (roupa de baixo de linho)
     cloth=[1 if all(-1.9<V[i][1]<0.95 and abs(V[i][0])<2.6 for i in f) else 0 for f in faces]
     return {'v':vv,'uv':uv,'w':w,'f':[[m[i] for i in f] for f in faces],'pano':cloth}
@@ -160,9 +190,7 @@ def armor(faces):
             us=[u for u,_ in uv]
             if max(us)-min(us)>0.5: uv=[[u+1 if u<0.5 else u, v] for u,v in uv]   # costura do cilindro
             fu.append([[round(u,4),round(v,4)] for u,v in uv])
-        w=[]
-        for i in ids:
-            a_,ww,b_=weights(V[i]); w.append([a_,round(ww,3),b_])
+        w=[wv(i) for i in ids]
         out.append({'nome':nm,'tex':tex,'v':vv,'w':w,'f':[[m[i] for i in f] for f in sel],'fu':fu})
     return out
 H=J['joint-head-2'][1]-J['joint-ground'][1]

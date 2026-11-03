@@ -214,6 +214,27 @@ A couraça usa o mesmo mapa da textura antiga (ângulo em volta do tronco × alt
 
 **Desempenho:** cerca de 16 ms por quadro na escala do jogo, com armadura (Chromium sem placa de vídeo).
 
+## Versão 10: físico de guerreiro, pesos profissionais e expressões faciais
+
+Recursos CC0 encontrados na pesquisa (`REFERENCIAS.md`) e baixados do GitHub:
+
+- **Físico de guerreiro.** Os alvos `caucasian-male-young` e `universal-male-young-maxmuscle-averageweight` do MakeHuman são aplicados à malha antes da extração, em `tools/mhcommon.py`, para corpo e cabeça. Resultado: ombros e peito mais largos, braços e coxas musculosos, rosto e pescoço masculinos. Os cortes do pescoço e a detecção do queixo passaram a ser relativos às articulações, porque o corpo mudou de proporção.
+- **Pesos de skinning profissionais.** Usam `weights.game_engine.json` do MPFB2 (rig "game engine": pelve, 3 vértebras, clavículas, braços, antebraços, mãos e dedos, coxas, panturrilhas, pés e dedos dos pés). Os ossos são convertidos para os nossos 14 (as clavículas vão para o tórax; mãos e dedos para o antebraço; `spine_02` é dividido entre lombar e tórax). Cada vértice usa até **3 ossos**. A armadura moldada usa os mesmos pesos.
+- **Expressões faciais.** Seis expressões compostas a partir das 34 unidades de expressão do MPFB2 (estilo FACS):
+
+  Expressão | Unidades combinadas | Quando aparece
+  ---|---|---
+  carranca | sobrancelhas baixas e cantos da boca caídos | em repouso
+  esforço | sobrancelhas baixas, olhos semicerrados, lábios retraídos (dentes cerrados), nariz franzido, platisma | golpes, Esmagar, Investida, Redemoinho, golpe de escudo (pico no meio do golpe)
+  fúria | o esforço, mais boca aberta e lábio superior levantado | Brado e enquanto a Fúria dura
+  dor | sobrancelhas internas erguidas, olhos meio fechados, boca para baixo | dano
+  morte | olhos fechados, boca entreaberta | morte
+  piscar | pálpebras fechadas | sozinho, a cada 2,5 a 6 s
+
+  Os deslocamentos ficam em `guerreiro-cabeca.js` (esparsos, por nível de detalhe). A transição entre expressões é suave (exponencial) e a intensidade é amplificada 1,6× para ser legível de longe.
+
+Para regenerar: `MH_ALVOS=… MH_PESOS=…/weights.game_engine.json python3 tools/mhbody.py base.obj guerreiro-corpo.js` e `MH_ALVOS=… MH_EXPR=…/expressoes python3 tools/mhhead.py base.obj guerreiro-cabeca.js`.
+
 ## Como ligar no jogo
 
 1. Cole o conteúdo de `guerreiro-osseo.js` em um `<script>` antes do script principal do jogo.
