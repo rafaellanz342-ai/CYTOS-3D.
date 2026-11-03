@@ -305,3 +305,13 @@ if (P.cls.id === 'guerreiro' && window.GuerreiroOsseo && !P.dead) {
 5. **Mais peso nos golpes.** Somar ao `hitstop` que já existe um leve zoom e tremor de câmera no `impact` do Esmagar. O módulo emite o evento: `GuerreiroOsseo.create({ on: (ev, nome) => … })`.
 6. **Equipamento visível.** Trocar a cor do tabardo e da capa conforme a armadura equipada, e o material da espada (osso, sangue, nervo) conforme a variante do ícone (`w_blade1_blood`, `w_axe_nerve`…).
 7. **Leitura em combate.** Manter o anel dourado sob o herói e dar a cada habilidade uma cor de rastro própria (Fúria = vermelho, Brado = dourado).
+
+## Versão 13: texturas geradas por código (Claude)
+- `tools/gerar_texturas.py` (numpy) pinta as texturas de **osso, couro, pele, tecido e metal** sem depender do Canva: ruído 1/f no domínio de Fourier e células de Worley com volta nas bordas (ladrilham sem emenda).
+- **Relevo cozido:** cada textura tem um mapa de altura; dele saem normais, luz difusa, brilho especular e oclusão nas cavidades.
+  - osso: lamelas, canais de Havers, fissuras, encardido, sangue seco;
+  - couro: grão em células, rugas, arranhões, quinas gastas;
+  - pele: mosqueado, poros suaves, sulcos, veias, sardas, cicatrizes em cordão;
+  - tecido: trama tafetá com fios irregulares, dobras, furos, barro e sangue;
+  - metal: martelado, escovado, filigrana gravada, rebites, corrosão e ferrugem.
+- `montar_imagens.py` usa `<chave>-claude.jpg` antes de `<chave>-canva.jpg`. O rosto continua o do Canva. A pele entra com opacidade menor (0,6) para não granular.

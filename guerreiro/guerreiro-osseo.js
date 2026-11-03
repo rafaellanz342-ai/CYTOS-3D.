@@ -893,7 +893,7 @@
     blotch(g, 512, 512, 80, ['rgba(120,70,56,.25)', 'rgba(60,38,30,.22)', 'rgba(210,170,150,.12)'], R, 10, 70);
     for (let i = 0; i < 9000; i++) { g.fillStyle = `rgba(40,22,16,${R() * 0.18})`; g.fillRect(R() * 512, R() * 512, 1, 1); }
     for (let i = 0; i < 10; i++) { const x = R() * 512, y = R() * 512, l = 10 + R() * 26, a = R() * TAU; g.strokeStyle = 'rgba(220,160,150,.45)'; g.lineWidth = 2; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke(); }
-    noisePx(g, 512, 512, 12, R); overlayImg(g, 512, 512, 'pele', 0.85, null, 256); T.body = c;
+    noisePx(g, 512, 512, 12, R); overlayImg(g, 512, 512, 'pele', 0.6, null, 256); T.body = c;
     // tanga de linho cru (única peça quando está sem armadura)
     [c, g] = mkCanvas(128, 128); R = rng(92); g.fillStyle = '#4a3a2a'; g.fillRect(0, 0, 128, 128);
     g.globalAlpha = 0.18; g.fillStyle = '#000'; for (let y = 0; y < 128; y += 2) g.fillRect(0, y, 128, 1); g.fillStyle = '#fff'; g.globalAlpha = 0.08; for (let x = 0; x < 128; x += 2) g.fillRect(x, 0, 1, 128); g.globalAlpha = 1;
@@ -923,7 +923,7 @@
     for (let i = 0; i < 6; i++) { let x = R() * 256, y = 0; g.lineWidth = 1.5 + R() * 1.5; g.beginPath(); g.moveTo(x, y); while (y < 256) { x += (R() - 0.5) * 14; y += 12 + R() * 14; g.lineTo(x, y); } g.stroke(); } // veias
     for (let i = 0; i < 5; i++) { const x = R() * 256, y = R() * 256, l = 14 + R() * 24, a = R() * TAU; g.strokeStyle = 'rgba(220,160,150,.6)'; g.lineWidth = 2.2; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke(); } // cicatrizes
     g.fillStyle = 'rgba(20,10,10,.5)'; for (let i = 0; i < 3; i++) { const y = 90 + i * 16; g.beginPath(); g.moveTo(0, y); for (let x = 0; x <= 256; x += 16) g.lineTo(x, y + (x / 16 % 2 ? 5 : -2)); g.lineTo(256, y + 8); g.lineTo(0, y + 8); g.fill(); } // pintura de guerra
-    blood(g, 70, 190, 7, R, true); noisePx(g, 256, 256, 14, R); overlayImg(g, 256, 256, 'pele', 0.9); T.arm = c;
+    blood(g, 70, 190, 7, R, true); noisePx(g, 256, 256, 14, R); overlayImg(g, 256, 256, 'pele', 0.65); T.arm = c;
     // elmo: ferro negro gravado com faixa dourada na borda
     [c, g] = mkCanvas(256, 128); R = rng(83); paintMetal(g, 256, 128, R, '#3a3640', { blood: 2 });
     for (let x = 16; x < 256; x += 48) filigree(g, x, 46, 16, 'rgba(0,0,0,.65)', 'rgba(255,240,220,.22)');
