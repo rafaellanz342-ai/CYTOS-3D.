@@ -53,8 +53,46 @@
   const INK = '#070506';
 
   // ---------- proporções (metros) ----------
-  const SK = { thigh: 0.45, shin: 0.45, ankle: 0.075, hipW: 0.105, torso: 0.5, shW: 0.25, neck: 0.1, headR: 0.13,
-    uarm: 0.3, farm: 0.28, blade: 1.0, shieldR: 0.31 };
+  // Proporções no cânone heroico de 8 cabeças (Loomis; Richer; Gray's Anatomy) para ~1,85 m:
+  // cabeça 0,23 m; ombro (acrômio) a 1,51 m; mamilos a 2 cabeças do topo; umbigo a 3; púbis a 4 (metade da altura);
+  // fêmur ≈ 2 cabeças; tíbia ≈ 2 cabeças menos o tornozelo; úmero ≈ 1,4 cabeça; antebraço ≈ 1,2; pé ≈ 1,15.
+  const SK = { thigh: 0.46, shin: 0.44, ankle: 0.08, hipW: 0.09, torso: 0.55, shW: 0.2, neck: 0.06, headR: 0.115,
+    uarm: 0.32, farm: 0.27, blade: 1.0, shieldR: 0.31 };
+
+  // ---------- crânio e face esculpidos (não é uma esfera) ----------
+  // la: longitude (0 = frente do rosto), ph: ângulo polar a partir do topo. Devolve [frente, lado, cima] em metros,
+  // a partir do centro da cabeça (na altura das orelhas). Medidas médias de adulto: comprimento 0,20 m,
+  // largura 0,15 m, altura topo–queixo 0,23 m. Relevos: arco superciliar, órbitas, dorso e asas do nariz,
+  // zigomáticos, sulco nasolabial, lábios, queixo, ângulo da mandíbula, têmporas, orelhas e nuca.
+  const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+  function headShape(la, ph, feat, eyeLa) {
+    const v = ph / Math.PI, sp = Math.sin(ph), cp = Math.cos(ph), cl = Math.cos(la), sl = Math.sin(la);
+    const front = Math.max(0, cl), lower = sstep(0.5, 0.9, v);
+    const ax = cl > 0 ? 0.097 * (1 - 0.1 * lower * (1 - front)) : 0.103 * (1 - 0.42 * sstep(0.55, 0.95, v)); // occipital e nuca
+    const ay = 0.077 * (1 - 0.14 * lower - 0.1 * lower * front) * (1 + 0.04 * sstep(0.3, 0.5, v) * (1 - sstep(0.5, 0.7, v)));
+    const az = cp > 0 ? 0.11 : 0.072 + 0.046 * Math.pow(front, 1.2);    // a face desce mais que a nuca (queixo)
+    let p = [sp * cl * ax, sp * sl * ay, cp * az];
+    if (!feat) return p;
+    const L = Math.abs(la), e = eyeLa || 0.36;
+    const g = (l0, v0, sl0, sv, a) => a * Math.exp(-Math.pow((L - l0) / sl0, 2) / 2 - Math.pow((v - v0) / sv, 2) / 2);
+    let b = 0;
+    b += g(0, 0.445, 0.55, 0.025, 0.011);                                   // arco superciliar
+    b += g(e, 0.5, 0.12, 0.032, -0.017);                                    // órbitas
+    b += g(0, 0.5, 0.14, 0.03, -0.006);                                     // raiz do nariz
+    b += 0.026 * Math.exp(-Math.pow(la / 0.075, 2) / 2) * sstep(0.47, 0.6, v) * (1 - sstep(0.6, 0.64, v)); // dorso do nariz até a ponta
+    b += g(0.17, 0.6, 0.07, 0.022, 0.008);                                  // asas do nariz
+    b += g(0.78, 0.53, 0.22, 0.05, 0.011);                                  // zigomáticos (maçãs do rosto)
+    b += g(0.35, 0.6, 0.12, 0.04, -0.005);                                  // sulco abaixo da maçã
+    b += g(0, 0.675, 0.32, 0.035, 0.008);                                   // boca (arcada dentária)
+    b += g(0, 0.678, 0.26, 0.007, -0.004);                                  // fenda dos lábios
+    b += g(0, 0.72, 0.2, 0.012, -0.004);                                    // sulco mentolabial
+    b += g(0, 0.765, 0.28, 0.03, 0.01);                                     // queixo largo
+    b += g(1.2, 0.73, 0.3, 0.06, 0.016);                                    // ângulo da mandíbula (quadrada)
+    b += g(1.12, 0.38, 0.2, 0.07, -0.006);                                  // têmporas
+    b += g(Math.PI / 2, 0.53, 0.12, 0.05, 0.013);                           // orelhas
+    const n = norm(p);
+    return add(p, mul(n, b));
+  }
 
   // ======================================================================
   //  POSES E CONJUNTOS DE GOLPES
@@ -63,7 +101,7 @@
   //  twoHand: 1 = mão esquerda presa à haste (lança/foice sem escudo).
   // ======================================================================
   const BASE = {
-    pz: 0.9, rootX: 0, lean: 0.08, twist: -0.1, side: 0, hp: 0.05, hy: 0.08,
+    pz: 0.92, rootX: 0, lean: 0.08, twist: -0.1, side: 0, hp: 0.05, hy: 0.08,
     hR: [0.24, -0.3, 0.24], hL: [0.3, 0.2, 0.36],
     fR: [-0.12, -0.15, 0], fL: [0.14, 0.17, 0],
     sp: -0.5, sy: -0.6, sr: 0, shN: [0.85, 0.45, 0.12],
@@ -404,9 +442,9 @@
     const L = {};
     L.pel = pel; L.chest = tp([0, 0, SK.torso * 0.72]);
     L.shR = tp([0, -SK.shW, SK.torso - 0.04]); L.shL = tp([0, SK.shW, SK.torso - 0.04]);
-    L.neck = tp([0, 0, SK.torso + 0.04]);
+    L.neck = tp([0, 0, SK.torso + 0.06]); // incisura jugular / C7
     const H = mm(T, mm(Rz(p.hy), Ry(p.hp)));
-    L.head = add(L.neck, mv(H, [0.01, 0, SK.neck + SK.headR * 0.75]));
+    L.head = add(L.neck, mv(H, [0.025, 0, SK.neck + 0.075])); // centro da cabeça na altura das orelhas (~13 cm acima de C7)
     L.hF = mv(H, [1, 0, 0]); L.hU = mv(H, [0, 0, 1]); L.hS = mv(H, [0, 1, 0]);
     // mão direita + direção da arma
     [L.elR, L.haR] = ik(L.shR, tp(p.hR), SK.uarm, SK.farm, tv([-0.45, -0.55, -0.5]));
@@ -438,19 +476,25 @@
     const poleK = mv(Pm, [1, 0, 0.1]);
     [L.knR, L.anR] = ik(hipR, add(p.fR, [0, 0, SK.ankle]), SK.thigh, SK.shin, add(poleK, [0, -0.15, 0]));
     [L.knL, L.anL] = ik(hipL, add(p.fL, [0, 0, SK.ankle]), SK.thigh, SK.shin, add(poleK, [0, 0.15, 0]));
-    L.toR = add(L.anR, mv(Rz(-0.25), [0.15, 0, -0.05])); L.toL = add(L.anL, mv(Rz(0.25), [0.15, 0, -0.05]));
+    L.toR = add(L.anR, mv(Rz(-0.2), [0.18, 0, -0.06])); L.toL = add(L.anL, mv(Rz(0.2), [0.18, 0, -0.06]));
+    L.heR = add(L.anR, mv(Rz(-0.2), [-0.06, 0, -0.05])); L.heL = add(L.anL, mv(Rz(0.2), [-0.06, 0, -0.05])); // calcanhar
     // âncoras dos panos
     L.capeA = []; for (let c = 0; c < 7; c++) L.capeA.push(tp([-0.13 - 0.06 * Math.sin(c / 6 * Math.PI), lerp(0.29, -0.29, c / 6), SK.torso - 0.05]));
     L.tabFA = [-1, -1 / 3, 1 / 3, 1].map(s => tp([0.17, s * 0.09, -0.02])); L.tabBA = [-1, -1 / 3, 1 / 3, 1].map(s => tp([-0.16, s * 0.09, -0.02]));
     // anéis do tronco (seções elípticas; frente da textura em a = 0)
-    // peitorais: volume extra na frente, dos dois lados do esterno, entre z 0,3 e 0,48
-    const pec = (a, z) => Math.cos(a) > 0 ? 0.13 * Math.max(0, Math.sin((z - 0.28) / 0.22 * Math.PI)) * Math.exp(-Math.pow((Math.abs(a) - 0.55) / 0.38, 2)) : 0;
-    const ring = (z, rx, ry, M, n) => { const pts = []; for (let i = 0; i <= n; i++) { const a = i / n * TAU - Math.PI, k = 1 + pec(a, z); pts.push(add(pel, mv(M, [rx * k * Math.cos(a), ry * Math.sin(a), z]))); } return pts; };
-    const TR = [[-0.02, 0.135, 0.16], [0.06, 0.135, 0.158], [0.14, 0.142, 0.172], [0.22, 0.155, 0.2], [0.3, 0.168, 0.228], [0.38, 0.175, 0.245], [0.45, 0.165, 0.25], [0.51, 0.128, 0.215], [0.56, 0.065, 0.11]];
-    L.torsoRings = TR.map(r => ring(r[0], r[1], r[2], T, 16)); this.torsoV = TR.map(r => (0.56 - r[0]) / 0.58);
-    L.hipRings = [ring(-0.17, 0.175, 0.205, Pm, 16), ring(-0.07, 0.158, 0.188, Pm, 16), ring(0.02, 0.145, 0.168, T, 16)];
-    L.gemBelt = { p: tp([0.17, 0, 0.035]), n: tv([1, 0, 0]) };
-    L.pouch = tp([0.04, -0.19, 0.0]);
+    // seções do tronco medidas de referências anatômicas (z a partir da articulação do quadril):
+    // [z, meia largura, profundidade frontal, profundidade dorsal]
+    const pec = (a, z) => Math.cos(a) > 0 ? 0.13 * Math.max(0, Math.sin((z - 0.36) / 0.2 * Math.PI)) * Math.exp(-Math.pow((Math.abs(a) - 0.55) / 0.38, 2)) : 0;
+    const scap = (a, z) => Math.cos(a) < 0 ? 0.09 * Math.max(0, Math.sin((z - 0.36) / 0.2 * Math.PI)) * Math.exp(-Math.pow((Math.PI - Math.abs(a) - 0.55) / 0.35, 2)) : 0;
+    const spine = a => Math.cos(a) < 0 ? -0.07 * Math.exp(-Math.pow((Math.PI - Math.abs(a)) / 0.16, 2)) : 0;
+    const glute = (a, z) => Math.cos(a) < 0 ? 0.12 * Math.max(0, 1 - Math.abs(z + 0.04) / 0.1) * Math.exp(-Math.pow((Math.PI - Math.abs(a) - 0.45) / 0.4, 2)) : 0;
+    const ring = (z, ry, rf, rb, M, n) => { const pts = []; for (let i = 0; i <= n; i++) { const a = i / n * TAU - Math.PI, rx = Math.cos(a) > 0 ? rf : rb, k = 1 + pec(a, z) + scap(a, z) + spine(a) + glute(a, z); pts.push(add(pel, mv(M, [rx * k * Math.cos(a), ry * Math.sin(a), z]))); } return pts; };
+    const TR = [[-0.08, 0.165, 0.1, 0.12], [0.0, 0.17, 0.108, 0.12], [0.08, 0.152, 0.102, 0.105], [0.16, 0.142, 0.1, 0.098], [0.24, 0.148, 0.108, 0.1],
+      [0.32, 0.16, 0.115, 0.108], [0.4, 0.174, 0.122, 0.115], [0.46, 0.182, 0.128, 0.12], [0.52, 0.178, 0.12, 0.12], [0.57, 0.14, 0.085, 0.098], [0.61, 0.07, 0.056, 0.062]];
+    L.torsoRings = TR.map(r => ring(r[0], r[1], r[2], r[3], T, 18)); this.torsoV = TR.map(r => (0.61 - r[0]) / 0.69);
+    L.hipRings = [ring(-0.2, 0.21, 0.15, 0.17, Pm, 18), ring(-0.1, 0.19, 0.13, 0.15, Pm, 18), ring(0.0, 0.175, 0.115, 0.128, T, 18)];
+    L.gemBelt = { p: tp([0.115, 0, 0.06]), n: tv([1, 0, 0]) };
+    L.pouch = tp([0.03, -0.18, 0.02]);
     L.tF = tv([1, 0, 0]); L.tS = tv([0, 1, 0]); L.tU = tv([0, 0, 1]);
     this.L = L;
     this.toWorld(p);
@@ -648,7 +692,7 @@
     T.cape = cloth(true, false); T.cloth = cloth(false, false); T.clothIn = cloth(false, true);
     // couraça: placa escura gravada + caixa torácica em relevo + bandoleira + espinha + cinto
     [c, g] = mkCanvas(512, 256); R = rng(71); paintMetal(g, 512, 256, R, '#3a363c', {});
-    const W2 = 512, H2 = 256, zTop = 0.56, zBot = -0.02;
+    const W2 = 512, H2 = 256, zTop = 0.61, zBot = -0.08;
     const U = a => (a / TAU + 0.5) * W2, V = z => (zTop - z) / (zTop - zBot) * H2;
     const bonePat = g.createPattern(T.bone, 'repeat');
     const emboss = (path, lw) => {
@@ -659,49 +703,50 @@
     };
     g.lineCap = 'round'; g.lineJoin = 'round';
     for (const a of [Math.PI / 2, -Math.PI / 2]) { const sx = U(a); g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(sx - 1.5, 0, 3, H2); for (let y = 12; y < H2 - 20; y += 22) rivet(g, sx + 8, y, 3, '#6a6266'); filigree(g, sx - 26, 120, 22, 'rgba(0,0,0,.6)', 'rgba(255,240,220,.2)'); filigree(g, sx + 34, 80, 18, 'rgba(0,0,0,.6)', 'rgba(255,240,220,.2)'); }
-    for (const [z0, wa] of [[0.17, 1.0], [0.24, 1.15], [0.31, 1.25], [0.38, 1.3], [0.45, 1.2]]) emboss(() => { g.beginPath(); for (let i = 0; i <= 24; i++) { const a = lerp(-wa, wa, i / 24); const x = U(a), y = V(z0 - 0.05 * a * a); i ? g.lineTo(x, y) : g.moveTo(x, y); } }, 11);
-    emboss(() => { g.beginPath(); g.moveTo(U(0), V(0.5)); g.lineTo(U(0), V(0.13)); }, 18);
-    emboss(() => { g.beginPath(); g.moveTo(U(-1.2), V(0.5)); g.quadraticCurveTo(U(-0.5), V(0.47), U(0), V(0.5)); g.quadraticCurveTo(U(0.5), V(0.47), U(1.2), V(0.5)); }, 9);
+    for (const [z0, wa] of [[0.27, 1.0], [0.33, 1.15], [0.39, 1.25], [0.45, 1.3], [0.51, 1.2]]) emboss(() => { g.beginPath(); for (let i = 0; i <= 24; i++) { const a = lerp(-wa, wa, i / 24); const x = U(a), y = V(z0 - 0.05 * a * a); i ? g.lineTo(x, y) : g.moveTo(x, y); } }, 11);
+    emboss(() => { g.beginPath(); g.moveTo(U(0), V(0.56)); g.lineTo(U(0), V(0.26)); }, 18); // esterno
+    emboss(() => { g.beginPath(); g.moveTo(U(-1.2), V(0.57)); g.quadraticCurveTo(U(-0.5), V(0.54), U(0), V(0.57)); g.quadraticCurveTo(U(0.5), V(0.54), U(1.2), V(0.57)); }, 9); // clavículas
     for (const ox of [0, W2]) {
-      for (const [z0, wa] of [[0.2, 0.75], [0.28, 0.85], [0.36, 0.85], [0.44, 0.75]]) emboss(() => { g.beginPath(); for (let i = 0; i <= 12; i++) { const a = lerp(-wa, wa, i / 12); const x = ox + a / TAU * W2, y = V(z0 - 0.03 * a * a); i ? g.lineTo(x, y) : g.moveTo(x, y); } }, 8);
-      for (let z = 0.5; z > 0.08; z -= 0.055) { const y = V(z); g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(ox - 11, y - 7 + 3, 22, 15); g.fillStyle = bonePat; g.fillRect(ox - 10, y - 7, 20, 13); g.fillStyle = 'rgba(255,250,232,.5)'; g.fillRect(ox - 9, y - 7, 18, 2); }
+      for (const [z0, wa] of [[0.3, 0.75], [0.37, 0.85], [0.44, 0.85], [0.51, 0.75]]) emboss(() => { g.beginPath(); for (let i = 0; i <= 12; i++) { const a = lerp(-wa, wa, i / 12); const x = ox + a / TAU * W2, y = V(z0 - 0.03 * a * a); i ? g.lineTo(x, y) : g.moveTo(x, y); } }, 8);
+      for (let z = 0.58; z > 0.1; z -= 0.055) { const y = V(z); g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(ox - 11, y - 7 + 3, 22, 15); g.fillStyle = bonePat; g.fillRect(ox - 10, y - 7, 20, 13); g.fillStyle = 'rgba(255,250,232,.5)'; g.fillRect(ox - 9, y - 7, 18, 2); }
     }
-    strap(g, U(-0.95), V(0.54), U(0.85), V(0.06), 16, 0.52, th);       // bandoleira pela frente
-    strap(g, U(Math.PI - 0.6), V(0.54), U(Math.PI + 0.2) - W2 + W2, V(0.1), 16, 0, th);
-    for (let i = 0; i < 4; i++) blood(g, U((R() - 0.5) * 2.2), V(0.12 + R() * 0.38), 5 + R() * 8, R, true);
-    trimBand(g, W2, V(0.08), V(0.0), th, 24);
-    skullShape(g, U(0), V(0.045), 13, '#e2d4b4', 'rgba(20,10,6,.9)');
+    strap(g, U(-0.95), V(0.58), U(0.85), V(0.12), 16, 0.52, th);       // bandoleira pela frente
+    strap(g, U(Math.PI - 0.6), V(0.58), U(Math.PI - 0.1), V(0.14), 16, 0, th);
+    for (let i = 0; i < 4; i++) blood(g, U((R() - 0.5) * 2.2), V(0.2 + R() * 0.38), 5 + R() * 8, R, true);
+    trimBand(g, W2, V(0.1), V(0.02), th, 24);
+    skullShape(g, U(0), V(0.065), 13, '#e2d4b4', 'rgba(20,10,6,.9)');
     noisePx(g, W2, H2, 10, R); T.torso = c;
     // rosto (equirretangular, frente no centro): pele curtida, órbitas fundas, cicatriz costurada, lágrimas de sangue
     [c, g] = mkCanvas(256, 128); R = rng(81);
     g.fillStyle = '#8a6a58'; g.fillRect(0, 0, 256, 128);
     blotch(g, 256, 128, 26, ['rgba(120,70,60,.3)', 'rgba(60,40,34,.3)', 'rgba(200,160,140,.15)'], R, 6, 24);
     for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(40,24,18,${R() * 0.25})`; g.fillRect(R() * 256, R() * 128, 1, 1); }
-    for (let i = 0; i < 700; i++) { const x = 96 + R() * 64, y = 80 + R() * 40; g.fillStyle = `rgba(22,14,10,${0.2 + R() * 0.3})`; g.fillRect(x, y, 1, 1.5); } // barba por fazer
+    for (let i = 0; i < 700; i++) { const x = 100 + R() * 56, y = 80 + R() * 22; g.fillStyle = `rgba(22,14,10,${0.2 + R() * 0.3})`; g.fillRect(x, y, 1, 1.5); } // barba por fazer
     for (const s of [-1, 1]) {
-      const x = 128 + s * 22, y = 63;
+      const x = 128 + s * 15, y = 64;
       const gr = g.createRadialGradient(x, y, 2, x, y, 20); gr.addColorStop(0, 'rgba(10,4,2,.95)'); gr.addColorStop(0.55, 'rgba(30,14,10,.75)'); gr.addColorStop(1, 'rgba(60,30,24,0)'); g.fillStyle = gr; g.fillRect(x - 22, y - 22, 44, 44);
-      g.fillStyle = '#cfc4b0'; g.beginPath(); g.ellipse(x, y + 1, 8, 3.6, 0, 0, TAU); g.fill();
+      g.fillStyle = '#cfc4b0'; g.beginPath(); g.ellipse(x, y + 1, 6, 3, 0, 0, TAU); g.fill();
       g.fillStyle = '#ff9a2a'; g.beginPath(); g.arc(x + s * 0.5, y + 1, 3, 0, TAU); g.fill(); g.fillStyle = '#100604'; g.beginPath(); g.arc(x + s * 0.5, y + 1, 1.3, 0, TAU); g.fill();
-      g.strokeStyle = '#1a0e08'; g.lineWidth = 4.5; g.lineCap = 'round'; g.beginPath(); g.moveTo(x - s * 12, y - 12); g.quadraticCurveTo(x, y - 10, x + s * 12, y - 6); g.stroke(); // sobrancelha franzida
+      g.strokeStyle = '#1a0e08'; g.lineWidth = 4.5; g.lineCap = 'round'; g.beginPath(); g.moveTo(x + s * 9, y - 9); g.quadraticCurveTo(x, y - 8, x - s * 7, y - 5); g.stroke(); // sobrancelha franzida
       for (let k = 0; k < 2; k++) { const dx = x - 3 + k * 6; g.strokeStyle = 'rgba(96,6,10,.85)'; g.lineWidth = 1.8; g.beginPath(); g.moveTo(dx, y + 5); g.lineTo(dx + (R() - 0.5) * 2, y + 18 + R() * 16); g.stroke(); } // lágrimas de sangue
     }
-    g.strokeStyle = 'rgba(30,14,10,.45)'; g.lineWidth = 2; g.beginPath(); g.moveTo(128, 50); g.lineTo(128, 56); g.stroke(); // ruga entre as sobrancelhas
-    { const gr = g.createLinearGradient(118, 0, 138, 0); gr.addColorStop(0, 'rgba(30,16,12,.5)'); gr.addColorStop(0.5, 'rgba(220,180,160,.35)'); gr.addColorStop(1, 'rgba(30,16,12,.5)'); g.fillStyle = gr; g.fillRect(118, 62, 20, 22); }
-    g.fillStyle = 'rgba(20,8,6,.8)'; for (const s of [-1, 1]) { g.beginPath(); g.ellipse(128 + s * 5, 84, 3, 2, 0, 0, TAU); g.fill(); }
-    g.strokeStyle = 'rgba(30,12,10,.85)'; g.lineWidth = 2; g.beginPath(); g.moveTo(116, 98); g.quadraticCurveTo(128, 95, 140, 99); g.stroke(); // boca
-    g.strokeStyle = 'rgba(220,150,140,.85)'; g.lineWidth = 3; g.beginPath(); g.moveTo(140, 40); g.lineTo(156, 92); g.stroke(); // cicatriz
-    g.strokeStyle = 'rgba(40,14,12,.9)'; g.lineWidth = 1.2; for (let k = 0; k < 5; k++) { const t = k / 4, x = lerp(140, 156, t), y = lerp(40, 92, t); g.beginPath(); g.moveTo(x - 4, y + 1); g.lineTo(x + 4, y - 1); g.stroke(); }
-    noisePx(g, 256, 128, 14, R); T.face = c; T.eyeLa = 0.54;
+    g.strokeStyle = 'rgba(30,14,10,.45)'; g.lineWidth = 2; g.beginPath(); g.moveTo(128, 54); g.lineTo(128, 60); g.stroke(); // ruga entre as sobrancelhas
+    { const gr = g.createLinearGradient(122, 0, 134, 0); gr.addColorStop(0, 'rgba(30,16,12,.5)'); gr.addColorStop(0.5, 'rgba(220,180,160,.35)'); gr.addColorStop(1, 'rgba(30,16,12,.5)'); g.fillStyle = gr; g.fillRect(122, 62, 12, 16); }
+    g.fillStyle = 'rgba(20,8,6,.8)'; for (const s of [-1, 1]) { g.beginPath(); g.ellipse(128 + s * 4, 77, 2.4, 1.6, 0, 0, TAU); g.fill(); }
+    g.strokeStyle = 'rgba(30,12,10,.85)'; g.lineWidth = 2; g.beginPath(); g.moveTo(120, 87); g.quadraticCurveTo(128, 85, 136, 88); g.stroke(); // boca
+    g.strokeStyle = 'rgba(220,150,140,.85)'; g.lineWidth = 3; g.beginPath(); g.moveTo(140, 46); g.lineTo(148, 82); g.stroke(); // cicatriz
+    g.strokeStyle = 'rgba(40,14,12,.9)'; g.lineWidth = 1.2; for (let k = 0; k < 5; k++) { const t = k / 4, x = lerp(140, 148, t), y = lerp(46, 82, t); g.beginPath(); g.moveTo(x - 4, y + 1); g.lineTo(x + 4, y - 1); g.stroke(); }
+    noisePx(g, 256, 128, 14, R); T.face = c; T.eyeLa = 0.36;
     if (IMAGES.rosto) {
-      const im = IMAGES.rosto, [fc, fg] = mkCanvas(512, 256), tw = 176, thh = 150, x0 = 256 - tw / 2, y0 = 80;
+      const im = IMAGES.rosto, [fc, fg] = mkCanvas(512, 256), tw = 156, thh = 105, x0 = 256 - tw / 2, y0 = 128 - 68 / 190 * 105; // olhos do retrato em ph = 0,5π
       fg.drawImage(c, 0, 0, 512, 256);                                   // pele procedural nas laterais
       const [mc, mg] = mkCanvas(tw, thh); mg.drawImage(im, im.width * 0.1, 0, im.width * 0.8, im.height * 0.95, 0, 0, tw, thh);
       mg.globalCompositeOperation = 'destination-in';                     // máscara oval com borda suave
-      const gr = mg.createRadialGradient(tw / 2, thh * 0.48, Math.min(tw, thh) * 0.3, tw / 2, thh * 0.48, tw * 0.52);
-      gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); mg.fillStyle = gr; mg.save(); mg.scale(1, thh / tw * 1.15); mg.fillRect(0, 0, tw, tw * 1.2); mg.restore();
+      mg.save(); mg.translate(tw / 2, thh * 0.5); mg.scale(1, thh / tw * 1.05);
+      const gr = mg.createRadialGradient(0, 0, tw * 0.3, 0, 0, tw * 0.5); gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      mg.fillStyle = gr; mg.fillRect(-tw, -tw, 2 * tw, 2 * tw); mg.restore();
       fg.drawImage(mc, x0, y0);
-      T.face = fc; T.eyeLa = 0.42; T.faceImg = true;
+      T.face = fc; T.eyeLa = 0.36; T.faceImg = true;
     }
     [c, g] = mkCanvas(64, 64); g.fillStyle = '#8a6a58'; g.fillRect(0, 0, 64, 64); noisePx(g, 64, 64, 18, rng(82)); T.skin = c;
     // pele dos braços: tom curtido, veias, cicatrizes e pintura de guerra
@@ -924,7 +969,8 @@
       const hip = J['hip' + sd], kn = J['kn' + sd], an = J['an' + sd], to = J['to' + sd];
       tube(hip, kn, [[0, 0.102], [0.3, 0.112, 1.08, -0.008], [0.65, 0.098, 1.1, -0.012], [0.9, 0.08], [1, 0.076]], 12, 'iron');
       tube(kn, an, [[0, 0.07], [0.22, 0.08, 1.15, 0.018], [0.45, 0.074, 1.1, 0.014], [0.8, 0.052], [1, 0.047]], 12, 'greave', { bias: 0.005 });
-      tube(add(an, [0, 0, 0.02]), to, [[0, 0.076], [0.55, 0.07], [1, 0.05]], 8, 'plate', { bias: 0.01, vRep: 0.8 });
+      tube(J['he' + sd], to, [[0, 0.04, 0.9], [0.2, 0.052, 0.95], [0.55, 0.05, 0.62], [0.85, 0.046, 0.5], [1, 0.03, 0.45]], 10, 'plate', { bias: 0.01, vRep: 0.8 }); // calcanhar, arco e dedos
+      tube(add(an, [0, 0, 0.04]), mix(J['he' + sd], to, 0.35), [[0, 0.056], [1, 0.052]], 10, 'plate', { bias: 0.012, vRep: 0.4 }); // tornozelo
       const kc = add(kn, mul(fwd, 0.04));
       ellip(kc, fwd, side, upv, 0.065, 0.075, 0.08, 10, 6, 'plate', { bias: 0.04 });
       if (fine) tube(add(kc, mul(fwd, 0.05)), add(kc, add(mul(fwd, 0.13), [0, 0, 0.02])), [[0, 0.026], [1, 0.002]], 6, 'steel', { bias: 0.045 });
@@ -938,35 +984,50 @@
     ringMesh(J.hipRings, J.pel, J.neck, 'mail', [0, 0.5, 1], { bias: -0.01 });
     ringMesh(J.torsoRings, J.pel, J.neck, 'torso', J.torsoV);
     if (fine) ellip(J.pouch, fwd, side, upv, 0.06, 0.04, 0.07, 8, 5, 'leather', { bias: 0.03 });
-    ellip(add(J.neck, [0, 0, -0.02]), fwd, side, upv, 0.11, 0.12, 0.08, 12, 6, 'plate', { bias: 0.004 });
-    ellip(add(add(J.neck, mul(fwd, -0.06)), [0, 0, -0.04]), fwd, side, upv, 0.17, 0.27, 0.1, 14, 6, 'fur', { bias: 0.002 });
+    ellip(add(add(J.neck, mul(fwd, -0.07)), [0, 0, -0.06]), fwd, side, upv, 0.15, 0.25, 0.08, 14, 6, 'fur', { bias: 0.002 });
     glow(J.gemBelt.p, J.gemBelt.n, 0.028, th.gem, 0.9);
 
     // ---------------- cabeça: rosto, elmo aberto, protetor nasal, chifres, máscara de maxilar ----------------
-    const hd = J.head, F = J.hF, U = J.hU, Sd = J.hS, R = SK.headR;
-    const onHead = (la, ph, sc) => add(hd, add(add(mul(U, R * sc * Math.cos(ph)), mul(F, R * sc * Math.sin(ph) * Math.cos(la))), mul(Sd, R * sc * Math.sin(ph) * Math.sin(la))));
-    const nHead = (la, ph) => norm(add(add(mul(U, Math.cos(ph)), mul(F, Math.sin(ph) * Math.cos(la))), mul(Sd, Math.sin(ph) * Math.sin(la))));
-    ellip(hd, F, Sd, U, R * 0.98, R * 0.9, R * 1.04, 16, 10, 'face', { bias: 0.006 });
-    if (fine && !TX.faceImg) tube(onHead(0, Math.PI * 0.53, 0.9), onHead(0, Math.PI * 0.6, 1.13), [[0, 0.02], [0.7, 0.02], [1, 0.014]], 6, 'skin', { bias: 0.012 }); // nariz
-    tube(add(J.neck, [0, 0, -0.04]), add(hd, mul(U, -0.06)), [[0, 0.07, 1.1], [1, 0.06]], 10, 'arm', { bias: -0.004, vRep: 0.3 }); // pescoço
-    const HS = 1.16;
-    ellip(hd, F, Sd, U, R * HS, R * HS * 0.97, R * HS, 18, 5, 'helm', { bias: 0.02, ph1: Math.PI * 0.36 });
-    ellip(hd, F, Sd, U, R * HS, R * HS * 0.97, R * HS, 14, 6, 'helm', { bias: 0.02, ph0: Math.PI * 0.36, ph1: Math.PI * 0.8, la0: 0.78, la1: TAU - 0.78 });
-    const brow = []; for (let i = 0; i <= 6; i++) brow.push(onHead(lerp(-1.05, 1.05, i / 6), Math.PI * 0.37, 1.19));
-    chain(brow, brow.map(() => 0.024), 6, 'gold', { bias: 0.025 });
-    if (!TX.faceImg) tube(onHead(0, Math.PI * 0.37, 1.2), onHead(0, Math.PI * 0.6, 1.19), [[0, 0.022], [1, 0.012]], 6, 'helm', { bias: 0.027 }); // protetor nasal
-    if (TX.faceImg) ellip(add(hd, add(mul(F, 0.03), mul(U, -0.165))), F, Sd, U, 0.075, 0.09, 0.03, 12, 6, 'jaw', { bias: 0.004 }); // gorjal de osso sob o queixo
-    else ellip(add(hd, add(mul(F, 0.075), mul(U, -0.115))), F, Sd, U, 0.07, 0.074, 0.042, 12, 6, 'jaw', { bias: 0.03 }); // máscara de maxilar (só o queixo)
-    for (const sg of [-1, 1]) { // chifres curvos
-      const b0 = onHead(sg * 1.45, Math.PI * 0.32, 1.1), sv = mul(Sd, sg);
-      const p1 = add(b0, add(mul(sv, 0.09), mul(U, 0.05))), p2 = add(p1, add(add(mul(sv, 0.05), mul(U, 0.11)), mul(F, -0.03))), p3 = add(p2, add(mul(F, -0.12), mul(U, 0.05))), p4 = add(p3, add(mul(F, -0.08), mul(U, -0.04)));
-      chain([b0, p1, p2, p3, p4], [0.045, 0.04, 0.03, 0.018, 0.003], 8, 'horn', { bias: 0.035 });
+    const hd = J.head, F = J.hF, U = J.hU, Sd = J.hS, eL = TX.eyeLa;
+    const toW = q => add(hd, add(add(mul(F, q[0]), mul(Sd, q[1])), mul(U, q[2])));
+    const onHead = (la, ph, sc, feat) => toW(mul(headShape(la, ph, feat, eL), sc || 1));
+    // malha esculpida: grade lon/lat sobre headShape; normais por diferenças finitas
+    const sculpt = (fn, lonN, latN, la0, la1, ph0, ph1, tex, opt) => {
+      lonN = seg(lonN); latN = seg(latN); const G = [];
+      for (let i = 0; i <= latN; i++) { const row = []; for (let j = 0; j <= lonN; j++) { const la = lerp(la0, la1, j / lonN), ph = lerp(ph0, ph1, i / latN); row.push({ p: fn(la, ph), uv: [(la + Math.PI) / TAU, ph / Math.PI], la, ph }); } G.push(row); }
+      for (let i = 0; i < latN; i++) for (let j = 0; j < lonN; j++) {
+        const a = G[i][j], b = G[i][j + 1], cc = G[i + 1][j + 1], dd = G[i + 1][j];
+        let n = cross(add(sub(b.p, a.p), sub(cc.p, dd.p)), add(sub(dd.p, a.p), sub(cc.p, b.p))); // normal pelas diagonais da própria grade
+        if (len(n) < 1e-9) n = sub(a.p, hd); n = norm(n);
+        if (dot(n, sub(mix(a.p, cc.p, 0.5), hd)) < 0) n = mul(n, -1);
+        if (i === 0 && ph0 === 0) face([dd.p, cc.p, a.p], [dd.uv, cc.uv, [(a.uv[0] + b.uv[0]) / 2, 0]], tex, n, opt);
+        else face([a.p, b.p, cc.p, dd.p], [a.uv, b.uv, cc.uv, dd.uv], tex, n, opt);
+      }
+    };
+    sculpt((la, ph) => onHead(la, ph, 1, true), 28, 18, -Math.PI, Math.PI, 0, Math.PI * 0.94, 'face', { bias: 0.006 }); // cabeça com feições
+    // pescoço: esternocleidomastoideos e trapézio formam um tronco de cone achatado que entra sob a mandíbula
+    tube(add(J.neck, [0, 0, -0.05]), add(hd, add(mul(U, -0.05), mul(F, -0.015))), [[0, 0.1, 0.8], [0.35, 0.068, 1], [1, 0.058, 1.1]], 12, 'arm', { bias: -0.004, vRep: 0.3 });
+    // elmo: acompanha o crânio (sem as feições), aberto na frente, com protetores de bochecha
+    const helmF = (la, ph) => { const q = headShape(la, ph, false, eL); return toW([q[0] * 1.12, q[1] * 1.14, q[2] * (q[2] > 0 ? 0.98 : 1.05) + 0.01]); }; // elmo justo ao crânio
+    sculpt(helmF, 24, 6, -Math.PI, Math.PI, 0, Math.PI * 0.4, 'helm', { bias: 0.02 });
+    sculpt(helmF, 18, 8, 0.95, TAU - 0.95, Math.PI * 0.4, Math.PI * 0.8, 'helm', { bias: 0.02 });
+    const nape = (la, ph) => { const t = (ph - Math.PI * 0.8) / (Math.PI * 0.14), q = headShape(la, Math.PI * 0.8, false, eL), o = norm([q[0], q[1], 0]);
+      return toW(add(add([q[0] * 1.14, q[1] * 1.16, q[2] * 1.05], mul(o, 0.035 * t)), [0, 0, -0.085 * t])); };
+    sculpt(nape, 14, 3, 1.7, TAU - 1.7, Math.PI * 0.8, Math.PI * 0.94, 'helm', { bias: 0.019 }); // proteção da nuca (aba que desce sobre o pescoço)
+    const brow = []; for (let i = 0; i <= 8; i++) brow.push(onHead(lerp(-1.05, 1.05, i / 8), Math.PI * 0.405, 1.16));
+    chain(brow, brow.map(() => 0.02), 6, 'gold', { bias: 0.025 });
+    if (!TX.faceImg) tube(onHead(0, Math.PI * 0.4, 1.16), onHead(0, Math.PI * 0.56, 1.22, true), [[0, 0.018], [1, 0.01]], 6, 'helm', { bias: 0.027 }); // protetor nasal
+    for (const sg of [-1, 1]) { // chifres curvos que nascem das têmporas do elmo
+      const b0 = onHead(sg * 1.45, Math.PI * 0.3, 1.1), sv = mul(Sd, sg);
+      const p1 = add(b0, add(mul(sv, 0.07), mul(U, 0.035))), p2 = add(p1, add(add(mul(sv, 0.035), mul(U, 0.08)), mul(F, -0.02))), p3 = add(p2, add(mul(F, -0.09), mul(U, 0.035))), p4 = add(p3, add(mul(F, -0.06), mul(U, -0.03)));
+      chain([b0, p1, p2, p3, p4], [0.034, 0.03, 0.022, 0.013, 0.003], 8, 'horn', { bias: 0.035 });
     }
-    for (let i = 0; i < (fine ? 5 : 2); i++) { const ph = lerp(0.12, 0.62, i / 4) * Math.PI, la = Math.PI; // crista de vértebras na nuca
-      tube(onHead(la, ph, 1.12), onHead(la, ph, 1.12 + 0.36 - 0.05 * i), [[0, 0.028], [0.5, 0.02], [1, 0.003]], 6, 'bone', { bias: 0.03 }); }
+    for (let i = 0; i < (fine ? 5 : 2); i++) { const ph = lerp(0.1, 0.55, i / 4) * Math.PI; // crista de vértebras sobre a nuca
+      tube(onHead(Math.PI, ph, 1.1), onHead(Math.PI, ph, 1.1 + 0.32 - 0.05 * i), [[0, 0.026], [0.5, 0.018], [1, 0.003]], 6, 'bone', { bias: 0.03 }); }
+    ellip(add(J.neck, add(mul(fwd, 0.01), [0, 0, -0.01])), fwd, side, upv, 0.085, 0.1, 0.035, 14, 6, 'plate', { bias: 0.003, ph0: 0.25 }); // gorjal de placa
     const rg = this.rage > 0.05 ? this.rage : 0;
-    if (!TX.faceImg || rg) for (const sgn of [-1, 1]) { const la = sgn * TX.eyeLa, ph = Math.PI * 0.5; // com rosto pintado, os olhos só acendem na Fúria
-      glow(onHead(la, ph, 0.96), nHead(la, ph), 0.015 + 0.022 * rg, rg ? [255, 60 + (1 - rg) * 80 | 0, 20] : [255, 150, 40], 0.6 + 0.4 * rg, 0.03); }
+    if (!TX.faceImg || rg) for (const sgn of [-1, 1]) { const la = sgn * eL, ph = Math.PI * 0.5, P = onHead(la, ph, 0.98, true); // olhos acendem na Fúria
+      glow(P, norm(sub(P, hd)), 0.012 + 0.02 * rg, rg ? [255, 60 + (1 - rg) * 80 | 0, 20] : [255, 150, 40], 0.5 + 0.5 * rg, 0.03); }
 
     // ---------------- braços: malha, cotoveleira, braçadeira de osso, manopla; ombreiras em lâminas ----------------
     for (const sd of ['R', 'L']) {
@@ -981,14 +1042,14 @@
       hand(sd, ha, fa);
       const out = norm(sub(sh, J.neck)), Up = norm(add(mul(out, 0.45), [0, 0, 1])), Fp = norm(cross(out, [0, 0, 1])), Sp = norm(cross(Up, Fp));
       for (let k = fine ? 2 : 1; k >= 0; k--) { // lâminas sobrepostas
-        const pc = add(sh, add(mul(out, 0.03 + 0.04 * k), [0, 0, 0.05 - 0.055 * k]));
-        ellip(pc, Fp, Sp, Up, 0.14 - 0.01 * k, 0.135 - 0.008 * k, 0.11 - 0.012 * k, 14, 6, 'plate', { bias: 0.07 - 0.004 * k, ph1: Math.PI * 0.62 });
+        const pc = add(sh, add(mul(out, 0.035 + 0.032 * k), [0, 0, 0.045 - 0.045 * k]));
+        ellip(pc, Fp, Sp, Up, 0.118 - 0.008 * k, 0.112 - 0.007 * k, 0.09 - 0.01 * k, 14, 6, 'plate', { bias: 0.07 - 0.004 * k, ph1: Math.PI * 0.62 });
       }
       const top = add(sh, add(mul(out, 0.03), [0, 0, 0.05])), back = mul(fwd, -1);
       for (let k = 0; k < 2; k++) { const dv = norm(add(add(out, mul(Up, 1.1 - k * 0.35)), mul(back, 0.35 + k * 0.5)));
-        chain([add(top, mul(dv, 0.07)), add(top, mul(dv, 0.17)), add(add(top, mul(dv, 0.26 - k * 0.04)), mul(back, 0.04))], [0.034, 0.02, 0.003], 7, 'bone', { bias: 0.075 }); }
-      const sk = add(top, add(mul(out, 0.12), mul(Up, -0.02))); // caveira na ombreira
-      ellip(sk, out, norm(cross(Up, out)), Up, 0.05, 0.045, 0.05, 10, 6, 'skull', { bias: 0.08 });
+        chain([add(top, mul(dv, 0.06)), add(top, mul(dv, 0.14)), add(add(top, mul(dv, 0.21 - k * 0.03)), mul(back, 0.03))], [0.028, 0.017, 0.003], 7, 'bone', { bias: 0.075 }); }
+      const sk = add(top, add(mul(out, 0.1), mul(Up, -0.02))); // caveira na ombreira
+      ellip(sk, out, norm(cross(Up, out)), Up, 0.04, 0.036, 0.04, 10, 6, 'skull', { bias: 0.08 });
       glow(add(sk, mul(out, 0.05)), out, 0.02, th.gem, 0.7, 0.085);
     }
 

@@ -101,6 +101,41 @@ Cada imagem entra como base da textura correspondente, e o código desenha por c
 
 Para o jogo, inclua `guerreiro-imagens.js` **antes** de `guerreiro-osseo.js`.
 
+## Versão 5: cabeça e corpo com proporções anatômicas
+
+Baseado nas proporções dos livros de anatomia artística e médica: o **cânone heroico de 8 cabeças** (Andrew Loomis, *Figure Drawing for All It's Worth*), o cânone de Paul Richer (*Artistic Anatomy*) e as medidas médias de adulto do *Gray's Anatomy*.
+
+**Corpo (personagem de cerca de 1,85 m):**
+
+Medida | Valor | Referência
+---|---|---
+Cabeça | 0,23 m | 1/8 da altura
+Ombros | ~1,51 m |
+Mamilos | | 2 cabeças abaixo do topo
+Umbigo | | 3 cabeças abaixo do topo
+Púbis | | Metade da altura
+Fêmur (coxa) | 0,46 m | ≈ 2 cabeças
+Tíbia (canela) | 0,44 m |
+Úmero (braço) | 0,32 m | ≈ 1,4 cabeça
+Antebraço | 0,27 m | ≈ 1,2 cabeça
+Pé | 0,26 m | ≈ 1,15 cabeça, com calcanhar e arco
+
+- **Tronco:** 11 seções medidas, com frente e costas separadas. Tem peitorais, escápulas, sulco da coluna, glúteos, cintura e base do trapézio, sobre os quais fica a couraça.
+- **Couraça:** costelas, esterno e clavículas foram reposicionados nas alturas anatômicas.
+- **Pescoço:** cerca de 13 cm da vértebra C7 à altura das orelhas, com base larga (trapézio e esternocleidomastoideos).
+
+**Cabeça (não é mais uma esfera).** É uma malha esculpida pela função `headShape` sobre o formato do crânio e da face:
+- **Medidas:** comprimento 0,20 m, largura 0,15 m, altura do topo ao queixo 0,23 m.
+- **Crânio:** occipital saliente e nuca recolhida.
+- **Rosto:** arco superciliar, órbitas, raiz e dorso do nariz até a ponta, asas do nariz, zigomáticos com o sulco abaixo, arcada da boca, fenda dos lábios, sulco mentolabial, queixo largo e ângulo da mandíbula quadrado.
+- **Laterais:** têmporas e orelhas.
+
+As feições da geometria ficam nos mesmos pontos do rosto gerado no Canva (olhos, nariz, boca e queixo), então a imagem acompanha o relevo.
+
+**Elmo justo ao crânio:** aberto na frente, com protetores laterais, aba que desce sobre a nuca, faixa dourada na testa e gorjal de placa no pescoço. Os chifres e as ombreiras foram reduzidos para a nova proporção.
+
+**Desempenho:** cerca de 19 ms por quadro na escala do jogo, num Chromium sem placa de vídeo.
+
 ## Como ligar no jogo
 
 1. Cole o conteúdo de `guerreiro-osseo.js` em um `<script>` antes do script principal do jogo.
