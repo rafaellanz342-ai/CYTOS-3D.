@@ -80,6 +80,27 @@ Foice longa | Ceifa larga, ceifa ascendente, ceifa giratória 360° | Ceifa do J
 
 **Desempenho.** De perto, o modelo usa mais polígonos. No tamanho do jogo, os detalhes minúsculos (espigões, crista, nariz) somem sozinhos. Medido num Chromium sem placa de vídeo: cerca de 15 ms por quadro na escala 74 e cerca de 55 ms na escala 150.
 
+## Versão 4: anatomia e imagens geradas no Canva
+
+**Anatomia (código):**
+- **Membros:** seção elíptica com ventre muscular deslocado (quadríceps à frente, panturrilha atrás, bíceps e tríceps) e articulações mais estreitas.
+- **Tronco:** couraça com **peitorais** e cintura em V.
+- **Braços:** à mostra, com pele, veias, cicatrizes e pintura de guerra; deltoide e braçadeira de couro.
+- **Pescoço:** de pele, visível sob o elmo.
+- **Mãos:** palma enluvada, **4 dedos e polegar** que envolvem o cabo ou a haste (a mão do escudo fecha na alça) e juntas de placa. Os dedos só aparecem de perto.
+
+**Imagens do Canva + código.** O rosto foi **gerado no Canva** (`assets/rosto-canva.jpg`) e está embutido em `guerreiro-imagens.js`. O módulo aplica o retrato no centro da textura da cabeça, com borda esfumada sobre a pele procedural. Os olhos passam a acender só na Fúria. O mesmo mecanismo aceita outras imagens:
+
+```js
+GuerreiroOsseo.setImages({ rosto, metal, osso, couro, pele, tecido }); // URL, data URI ou <img>
+```
+
+Cada imagem entra como base da textura correspondente, e o código desenha por cima as faixas douradas, os arabescos, as costelas e o sangue. O **tecido** é recolorido para o tema escolhido. Sem imagens, tudo continua 100% procedural.
+
+> As texturas de metal, osso, couro, pele e tecido ainda não foram geradas: o Canva recusou os pedidos por limite de créditos ("cooling down"). Quando o limite liberar, basta gerá-las e adicioná-las em `guerreiro-imagens.js`.
+
+Para o jogo, inclua `guerreiro-imagens.js` **antes** de `guerreiro-osseo.js`.
+
 ## Como ligar no jogo
 
 1. Cole o conteúdo de `guerreiro-osseo.js` em um `<script>` antes do script principal do jogo.

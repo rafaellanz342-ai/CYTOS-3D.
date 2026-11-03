@@ -115,7 +115,7 @@
     lanca: {
       name: 'Lança Vertebral', two: true, shieldOk: true, len: 2.25, grip: 0.85, gripS: 1.1, off2: 0.34, head: 0.38,
       base: { hR: [0.08, -0.08, 0.3], sp: -0.12, sy: 0.1, sr: 0, twoHand: 1, twist: -0.2, lean: 0.12, fR: [-0.2, -0.15, 0], fL: [0.2, 0.17, 0] },
-      shieldAdj: { hR: [-0.06, -0.22, 0.32], sp: -0.16 },
+      shieldAdj: { hR: [-0.06, -0.22, 0.32], sp: 0.06 },
       names: { golpe: 'Estocada', esmagar: 'Salto Empalador', investida: 'Carga da Lança', redemoinho: 'Giro da Haste' },
       moves: {
         golpe: { dur: 0.4, trail: [0.32, 0.55], keys: [[0, {}],
@@ -443,8 +443,10 @@
     L.capeA = []; for (let c = 0; c < 7; c++) L.capeA.push(tp([-0.13 - 0.06 * Math.sin(c / 6 * Math.PI), lerp(0.29, -0.29, c / 6), SK.torso - 0.05]));
     L.tabFA = [-1, -1 / 3, 1 / 3, 1].map(s => tp([0.17, s * 0.09, -0.02])); L.tabBA = [-1, -1 / 3, 1 / 3, 1].map(s => tp([-0.16, s * 0.09, -0.02]));
     // anéis do tronco (seções elípticas; frente da textura em a = 0)
-    const ring = (z, rx, ry, M, n) => { const pts = []; for (let i = 0; i <= n; i++) { const a = i / n * TAU - Math.PI; pts.push(add(pel, mv(M, [rx * Math.cos(a), ry * Math.sin(a), z]))); } return pts; };
-    const TR = [[-0.02, 0.14, 0.165], [0.06, 0.145, 0.17], [0.14, 0.15, 0.186], [0.22, 0.158, 0.205], [0.3, 0.168, 0.225], [0.38, 0.172, 0.236], [0.45, 0.16, 0.236], [0.51, 0.125, 0.205], [0.56, 0.065, 0.11]];
+    // peitorais: volume extra na frente, dos dois lados do esterno, entre z 0,3 e 0,48
+    const pec = (a, z) => Math.cos(a) > 0 ? 0.13 * Math.max(0, Math.sin((z - 0.28) / 0.22 * Math.PI)) * Math.exp(-Math.pow((Math.abs(a) - 0.55) / 0.38, 2)) : 0;
+    const ring = (z, rx, ry, M, n) => { const pts = []; for (let i = 0; i <= n; i++) { const a = i / n * TAU - Math.PI, k = 1 + pec(a, z); pts.push(add(pel, mv(M, [rx * k * Math.cos(a), ry * Math.sin(a), z]))); } return pts; };
+    const TR = [[-0.02, 0.135, 0.16], [0.06, 0.135, 0.158], [0.14, 0.142, 0.172], [0.22, 0.155, 0.2], [0.3, 0.168, 0.228], [0.38, 0.175, 0.245], [0.45, 0.165, 0.25], [0.51, 0.128, 0.215], [0.56, 0.065, 0.11]];
     L.torsoRings = TR.map(r => ring(r[0], r[1], r[2], T, 16)); this.torsoV = TR.map(r => (0.56 - r[0]) / 0.58);
     L.hipRings = [ring(-0.17, 0.175, 0.205, Pm, 16), ring(-0.07, 0.158, 0.188, Pm, 16), ring(0.02, 0.145, 0.168, T, 16)];
     L.gemBelt = { p: tp([0.17, 0, 0.035]), n: tv([1, 0, 0]) };
@@ -571,15 +573,31 @@
     g.restore();
   }
 
+  // ---------- imagens externas (geradas no Canva) que refinam as texturas procedurais ----------
+  // chaves: rosto, metal, osso, couro, pele, tecido. Sem elas, tudo continua 100% procedural.
+  const IMAGES = {}; let IMGVER = 0;
   const TEXCACHE = {};
+  function setImages(map) {
+    for (const k in map) { const v = map[k]; if (!v) continue;
+      if (typeof v === 'string') { const im = new Image(); im.onload = () => { IMAGES[k] = im; IMGVER++; for (const t in TEXCACHE) delete TEXCACHE[t]; }; im.src = v; }
+      else { IMAGES[k] = v; IMGVER++; for (const t in TEXCACHE) delete TEXCACHE[t]; } }
+  }
+  // cobre a textura com a imagem (repetida em ladrilho), opcionalmente recolorida para o tema
+  function overlayImg(g, w, h, key, alpha, tint, tile) {
+    const im = IMAGES[key]; if (!im) return false;
+    g.save(); g.globalAlpha = alpha; const t = tile || w;
+    for (let y = 0; y < h; y += t) for (let x = 0; x < w; x += t) g.drawImage(im, x, y, t, t);
+    if (tint) { g.globalAlpha = 1; g.globalCompositeOperation = 'color'; g.fillStyle = tint; g.fillRect(0, 0, w, h); }
+    g.restore(); return true;
+  }
   function buildTextures(themeKey) {
-    if (TEXCACHE[themeKey]) return TEXCACHE[themeKey];
+    if (TEXCACHE[themeKey]) return TEXCACHE[themeKey]; void IMGVER;
     const th = THEMES[themeKey] || THEMES.carmesim, T = {};
     let c, g, R;
-    [c, g] = mkCanvas(256, 256); paintBone(g, 256, 256, rng(11)); blood(g, 70, 90, 9, rng(12), true); blood(g, 190, 170, 6, rng(13), false); T.bone = c;
-    [c, g] = mkCanvas(256, 256); paintMetal(g, 256, 256, rng(21), '#3c383e', { fil: 3, blood: 3 }); T.iron = c;
+    [c, g] = mkCanvas(256, 256); paintBone(g, 256, 256, rng(11)); overlayImg(g, 256, 256, 'osso', 0.85); blood(g, 70, 90, 9, rng(12), true); blood(g, 190, 170, 6, rng(13), false); T.bone = c;
+    [c, g] = mkCanvas(256, 256); paintMetal(g, 256, 256, rng(21), '#3c383e', { fil: 3, blood: 3 }); overlayImg(g, 256, 256, 'metal', 0.8); T.iron = c;
     // placa: ferro gravado + faixa dourada rebitada na borda inferior
-    [c, g] = mkCanvas(256, 128); R = rng(22); paintMetal(g, 256, 128, R, '#46424c', { blood: 2 });
+    [c, g] = mkCanvas(256, 128); R = rng(22); paintMetal(g, 256, 128, R, '#46424c', { blood: 2 }); overlayImg(g, 256, 128, 'metal', 0.8, null, 128);
     for (let x = 32; x < 256; x += 64) filigree(g, x, 52, 20, 'rgba(0,0,0,.6)', 'rgba(255,240,220,.2)');
     trimBand(g, 256, 100, 116, th, 21); T.plate = c;
     // aço das lâminas: escovado, fio brilhante nas bordas (u=0 e u=1), gravura e sangue
@@ -596,7 +614,7 @@
     for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(14,7,3,${R() * 0.38})`; g.fillRect(R() * 128, R() * 128, 1 + R(), 1); }
     for (let i = 0; i < 20; i++) { g.strokeStyle = 'rgba(160,120,90,.18)'; g.lineWidth = 0.8; const x = R() * 128, y = R() * 128; g.beginPath(); g.moveTo(x, y); g.lineTo(x + R() * 14 - 7, y + R() * 4 - 2); g.stroke(); }
     g.strokeStyle = '#b08a5a'; g.lineWidth = 1.2; g.setLineDash([4, 3]); for (const y of [7, 121]) { g.beginPath(); g.moveTo(0, y); g.lineTo(128, y); g.stroke(); } g.setLineDash([]);
-    blood(g, 90, 60, 6, R, true); noisePx(g, 128, 128, 16, R); T.leather = c;
+    blood(g, 90, 60, 6, R, true); noisePx(g, 128, 128, 16, R); overlayImg(g, 128, 128, 'couro', 0.85); T.leather = c;
     // madeira escura da haste
     [c, g] = mkCanvas(64, 256); R = rng(55); g.fillStyle = '#2e1c12'; g.fillRect(0, 0, 64, 256);
     for (let i = 0; i < 40; i++) { const x = R() * 64; g.strokeStyle = R() < 0.5 ? 'rgba(10,5,2,.45)' : 'rgba(120,80,50,.22)'; g.lineWidth = 0.6 + R() * 1.4; g.beginPath(); g.moveTo(x, 0); g.bezierCurveTo(x + R() * 10 - 5, 80, x + R() * 10 - 5, 170, x + R() * 6 - 3, 256); g.stroke(); }
@@ -618,6 +636,7 @@
       for (let i = 0; i < 9; i++) { const x = R() * 256, w = 10 + R() * 26, gg = g.createLinearGradient(x - w, 0, x + w, 0); gg.addColorStop(0, 'rgba(0,0,0,0)'); gg.addColorStop(0.5, `rgba(0,0,0,${0.14 + R() * 0.16})`); gg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gg; g.fillRect(x - w, 0, 2 * w, 256); }
       g.globalAlpha = 0.1; g.fillStyle = '#000'; for (let y = 0; y < 256; y += 2) g.fillRect(0, y, 256, 1); g.fillStyle = '#fff'; g.globalAlpha = 0.05; for (let x = 0; x < 256; x += 2) g.fillRect(x, 0, 1, 256); g.globalAlpha = 1;
       blotch(g, 256, 256, 10, ['rgba(0,0,0,.28)', 'rgba(60,16,8,.22)'], R, 10, 40);
+      overlayImg(g, 256, 256, 'tecido', dark ? 0.5 : 0.8, dark ? cl[2] : cl[0], 128);
       if (!dark) {
         trimBand(g, 256, 204, 216, th, 0); trimBand(g, 256, 222, 226, th, 0);
         if (emblem) { boneShape(g, 92, 72, 164, 144, 7, th.trim, 'rgba(10,4,6,.8)'); boneShape(g, 164, 72, 92, 144, 7, th.trim, 'rgba(10,4,6,.8)'); skullShape(g, 128, 104, 22, th.trim, 'rgba(10,4,6,.85)'); }
@@ -673,8 +692,27 @@
     g.strokeStyle = 'rgba(30,12,10,.85)'; g.lineWidth = 2; g.beginPath(); g.moveTo(116, 98); g.quadraticCurveTo(128, 95, 140, 99); g.stroke(); // boca
     g.strokeStyle = 'rgba(220,150,140,.85)'; g.lineWidth = 3; g.beginPath(); g.moveTo(140, 40); g.lineTo(156, 92); g.stroke(); // cicatriz
     g.strokeStyle = 'rgba(40,14,12,.9)'; g.lineWidth = 1.2; for (let k = 0; k < 5; k++) { const t = k / 4, x = lerp(140, 156, t), y = lerp(40, 92, t); g.beginPath(); g.moveTo(x - 4, y + 1); g.lineTo(x + 4, y - 1); g.stroke(); }
-    noisePx(g, 256, 128, 14, R); T.face = c;
+    noisePx(g, 256, 128, 14, R); T.face = c; T.eyeLa = 0.54;
+    if (IMAGES.rosto) {
+      const im = IMAGES.rosto, [fc, fg] = mkCanvas(512, 256), tw = 176, thh = 150, x0 = 256 - tw / 2, y0 = 80;
+      fg.drawImage(c, 0, 0, 512, 256);                                   // pele procedural nas laterais
+      const [mc, mg] = mkCanvas(tw, thh); mg.drawImage(im, im.width * 0.1, 0, im.width * 0.8, im.height * 0.95, 0, 0, tw, thh);
+      mg.globalCompositeOperation = 'destination-in';                     // máscara oval com borda suave
+      const gr = mg.createRadialGradient(tw / 2, thh * 0.48, Math.min(tw, thh) * 0.3, tw / 2, thh * 0.48, tw * 0.52);
+      gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); mg.fillStyle = gr; mg.save(); mg.scale(1, thh / tw * 1.15); mg.fillRect(0, 0, tw, tw * 1.2); mg.restore();
+      fg.drawImage(mc, x0, y0);
+      T.face = fc; T.eyeLa = 0.42; T.faceImg = true;
+    }
     [c, g] = mkCanvas(64, 64); g.fillStyle = '#8a6a58'; g.fillRect(0, 0, 64, 64); noisePx(g, 64, 64, 18, rng(82)); T.skin = c;
+    // pele dos braços: tom curtido, veias, cicatrizes e pintura de guerra
+    [c, g] = mkCanvas(256, 256); R = rng(86); g.fillStyle = '#8c6a56'; g.fillRect(0, 0, 256, 256);
+    blotch(g, 256, 256, 30, ['rgba(120,70,56,.3)', 'rgba(60,38,30,.28)', 'rgba(210,170,150,.14)'], R, 8, 40);
+    for (let i = 0; i < 1800; i++) { g.fillStyle = `rgba(40,22,16,${R() * 0.22})`; g.fillRect(R() * 256, R() * 256, 1, 1); }
+    g.strokeStyle = 'rgba(70,60,90,.35)'; g.lineCap = 'round';
+    for (let i = 0; i < 6; i++) { let x = R() * 256, y = 0; g.lineWidth = 1.5 + R() * 1.5; g.beginPath(); g.moveTo(x, y); while (y < 256) { x += (R() - 0.5) * 14; y += 12 + R() * 14; g.lineTo(x, y); } g.stroke(); } // veias
+    for (let i = 0; i < 5; i++) { const x = R() * 256, y = R() * 256, l = 14 + R() * 24, a = R() * TAU; g.strokeStyle = 'rgba(220,160,150,.6)'; g.lineWidth = 2.2; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke(); } // cicatrizes
+    g.fillStyle = 'rgba(20,10,10,.5)'; for (let i = 0; i < 3; i++) { const y = 90 + i * 16; g.beginPath(); g.moveTo(0, y); for (let x = 0; x <= 256; x += 16) g.lineTo(x, y + (x / 16 % 2 ? 5 : -2)); g.lineTo(256, y + 8); g.lineTo(0, y + 8); g.fill(); } // pintura de guerra
+    blood(g, 70, 190, 7, R, true); noisePx(g, 256, 256, 14, R); overlayImg(g, 256, 256, 'pele', 0.9); T.arm = c;
     // elmo: ferro negro gravado com faixa dourada na borda
     [c, g] = mkCanvas(256, 128); R = rng(83); paintMetal(g, 256, 128, R, '#3a3640', { blood: 2 });
     for (let x = 16; x < 256; x += 48) filigree(g, x, 46, 16, 'rgba(0,0,0,.65)', 'rgba(255,240,220,.22)');
@@ -733,9 +771,9 @@
     T.theme = th;
     return (TEXCACHE[themeKey] = T);
   }
-  const FALLBACK = { bone: '#bca984', iron: '#2f2b30', plate: '#34303a', steel: '#5a5e66', gold: '#b8924e', mail: '#2a2426', leather: '#3e2618', wood: '#2e1c12', fur: '#2a1e14', horn: '#8a7458', cape: '#64101a', cloth: '#64101a', clothIn: '#26050a', torso: '#2c282e', face: '#8a6a58', skin: '#8a6a58', helm: '#26232a', skull: '#cfbf9b', jaw: '#cfbf9b', bracer: '#c6b48e', greave: '#c6b48e', shield: '#64101a', shieldBack: '#3a2414', blade: '#d2c4a2' };
+  const FALLBACK = { bone: '#bca984', iron: '#2f2b30', plate: '#34303a', steel: '#5a5e66', gold: '#b8924e', mail: '#2a2426', leather: '#3e2618', wood: '#2e1c12', fur: '#2a1e14', horn: '#8a7458', cape: '#64101a', cloth: '#64101a', clothIn: '#26050a', torso: '#2c282e', face: '#8a6a58', skin: '#8a6a58', arm: '#8c6a56', helm: '#26232a', skull: '#cfbf9b', jaw: '#cfbf9b', bracer: '#c6b48e', greave: '#c6b48e', shield: '#64101a', shieldBack: '#3a2414', blade: '#d2c4a2' };
   // brilho especular e dureza por material
-  const SPEC = { iron: [0.6, 30], plate: [0.65, 30], helm: [0.65, 30], steel: [0.9, 44], gold: [0.9, 40], mail: [0.45, 10], bone: [0.18, 12], skull: [0.2, 12], jaw: [0.2, 12], horn: [0.3, 16], bracer: [0.25, 14], greave: [0.2, 12], torso: [0.5, 24], leather: [0.12, 8], blade: [0.35, 22], shield: [0.12, 10], face: [0.1, 8], skin: [0.1, 8] };
+  const SPEC = { iron: [0.6, 30], plate: [0.65, 30], helm: [0.65, 30], steel: [0.9, 44], gold: [0.9, 40], mail: [0.45, 10], bone: [0.18, 12], skull: [0.2, 12], jaw: [0.2, 12], horn: [0.3, 16], bracer: [0.25, 14], greave: [0.2, 12], torso: [0.5, 24], leather: [0.12, 8], blade: [0.35, 22], shield: [0.12, 10], face: [0.1, 8], skin: [0.1, 8], arm: [0.22, 10] };
 
   // textura pré-iluminada no nível L de NL (sombra fria ou luz quente da tocha)
   function shadedTex(TX, k, L, NL) {
@@ -776,7 +814,7 @@
     this.cv = bf[0]; this.sil = bf[1]; this.cx = this.cv.getContext('2d'); this.sx = this.sil.getContext('2d');
     const themeKey = this.theme || 'carmesim', TX = buildTextures(themeKey), th = TX.theme;
     const c = this.cx;
-    if (!bf.pat || bf.patTheme !== themeKey) { bf.pat = {}; bf.patTheme = themeKey; }
+    if (!bf.pat || bf.patTheme !== themeKey || bf.patTX !== TX) { bf.pat = {}; bf.patTheme = themeKey; bf.patTX = TX; }
     const NL = 10, PAT = bf.pat;
     const patFor = (k, L) => { const key = k + L; let p = PAT[key]; if (p) return p; p = PAT[key] = c.createPattern(shadedTex(TX, k, L, NL), 'repeat'); return p; };
     c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, W, H); c.translate(ox, oy);
@@ -794,7 +832,10 @@
     const tube = (A, B, prof, sides, tex, opt) => {
       opt = opt || {}; sides = seg(sides);
       const d = norm(sub(B, A)), [e1, e2] = basis(d), rings = [];
-      for (const [t, r] of prof) { const C = mix(A, B, t), ring = []; for (let k = 0; k <= sides; k++) { const a = k / sides * TAU, rd = add(mul(e1, Math.cos(a)), mul(e2, Math.sin(a))); ring.push({ p: add(C, mul(rd, r)), n: rd }); } rings.push({ t, ring }); }
+      for (const [t, r, k2, off] of prof) { // [t, raio, achatamento, deslocamento do ventre muscular]
+        const q = k2 || 1, C = add(mix(A, B, t), mul(e2, off || 0)), ring = [];
+        for (let k = 0; k <= sides; k++) { const a = k / sides * TAU, ca = Math.cos(a), sa = Math.sin(a); ring.push({ p: add(C, add(mul(e1, ca * r), mul(e2, sa * r * q))), n: norm(add(mul(e1, ca), mul(e2, sa / q))) }); }
+        rings.push({ t, ring }); }
       const ur = opt.uRep || 1, vr = opt.vRep || 1;
       for (let j = 0; j < rings.length - 1; j++) for (let k = 0; k < sides; k++) {
         const a = rings[j].ring[k], b = rings[j].ring[k + 1], cc = rings[j + 1].ring[k + 1], dd = rings[j + 1].ring[k];
@@ -837,6 +878,27 @@
         face(p, [[u0, i / n], [u0, (i + 1) / n], [0.5, (i + 1) / n], [0.5, i / n]], tex, fn, { two: true, bias });
       }
     };
+    // mão anatômica: palma enluvada + 4 dedos e polegar que envolvem o eixo de empunhadura
+    const hand = (sd, ha, fa) => {
+      let axis, wrap = true;
+      if (sd === 'R') axis = J.dir;
+      else if (this.shield) axis = norm(cross(fa, J.shN));
+      else if (this.pose && this.pose.twoHand > 0.5) axis = J.dir;
+      else { axis = norm(cross(fa, upv)); wrap = false; }
+      let u = sub(mul(fa, -1), mul(axis, dot(mul(fa, -1), axis))); u = len(u) < 1e-4 ? norm(cross(axis, upv)) : norm(u); // dorso da mão, voltado para o braço
+      const v = cross(axis, u), rg = wrap ? 0.034 : 0.022;
+      ellip(add(ha, mul(u, 0.03)), u, axis, v, 0.03, 0.05, 0.035, 8, 5, 'leather', { bias: 0.02 });
+      if (!fine) return;
+      for (let i = 0; i < 4; i++) {
+        const c0 = add(ha, mul(axis, -0.033 + i * 0.022)), pts = [];
+        for (const th of [0.15, 1.2, 2.3, 3.2]) pts.push(add(c0, add(mul(u, Math.cos(th) * (rg + 0.012)), mul(v, Math.sin(th) * (rg + 0.012)))));
+        chain(pts, [0.0125, 0.012, 0.011, 0.009], 6, 'leather', { bias: 0.022 });
+        ellip(pts[0], u, axis, v, 0.013, 0.014, 0.012, 6, 4, 'plate', { bias: 0.024 }); // juntas da manopla
+      }
+      const t0 = add(ha, mul(axis, 0.05)), tp = [];
+      for (const th of [0.3, -0.7, -1.6]) tp.push(add(t0, add(mul(u, Math.cos(th) * (rg + 0.014)), mul(v, Math.sin(th) * (rg + 0.014)))));
+      chain([add(ha, mul(u, 0.02)), ...tp], [0.016, 0.014, 0.012, 0.01], 6, 'leather', { bias: 0.022 });
+    };
     const glow = (P, n, r, rgb, a, bias) => glows.push({ P, n, r, rgb, a, d: depthOf(P) + (bias || 0.02) });
 
     // ---------------- capa, tabardos (pano físico, dupla face) ----------------
@@ -860,8 +922,8 @@
     // ---------------- pernas: coxote de placa, joelheira com espigão, greva de osso, sapato de placa ----------------
     for (const sd of ['R', 'L']) {
       const hip = J['hip' + sd], kn = J['kn' + sd], an = J['an' + sd], to = J['to' + sd];
-      tube(hip, kn, [[0, 0.1], [0.35, 0.106], [0.8, 0.082], [1, 0.076]], 10, 'iron');
-      tube(kn, an, [[0, 0.07], [0.25, 0.073], [0.75, 0.053], [1, 0.048]], 10, 'greave', { bias: 0.005 });
+      tube(hip, kn, [[0, 0.102], [0.3, 0.112, 1.08, -0.008], [0.65, 0.098, 1.1, -0.012], [0.9, 0.08], [1, 0.076]], 12, 'iron');
+      tube(kn, an, [[0, 0.07], [0.22, 0.08, 1.15, 0.018], [0.45, 0.074, 1.1, 0.014], [0.8, 0.052], [1, 0.047]], 12, 'greave', { bias: 0.005 });
       tube(add(an, [0, 0, 0.02]), to, [[0, 0.076], [0.55, 0.07], [1, 0.05]], 8, 'plate', { bias: 0.01, vRep: 0.8 });
       const kc = add(kn, mul(fwd, 0.04));
       ellip(kc, fwd, side, upv, 0.065, 0.075, 0.08, 10, 6, 'plate', { bias: 0.04 });
@@ -885,14 +947,16 @@
     const onHead = (la, ph, sc) => add(hd, add(add(mul(U, R * sc * Math.cos(ph)), mul(F, R * sc * Math.sin(ph) * Math.cos(la))), mul(Sd, R * sc * Math.sin(ph) * Math.sin(la))));
     const nHead = (la, ph) => norm(add(add(mul(U, Math.cos(ph)), mul(F, Math.sin(ph) * Math.cos(la))), mul(Sd, Math.sin(ph) * Math.sin(la))));
     ellip(hd, F, Sd, U, R * 0.98, R * 0.9, R * 1.04, 16, 10, 'face', { bias: 0.006 });
-    if (fine) tube(onHead(0, Math.PI * 0.53, 0.9), onHead(0, Math.PI * 0.6, 1.13), [[0, 0.02], [0.7, 0.02], [1, 0.014]], 6, 'skin', { bias: 0.012 }); // nariz
+    if (fine && !TX.faceImg) tube(onHead(0, Math.PI * 0.53, 0.9), onHead(0, Math.PI * 0.6, 1.13), [[0, 0.02], [0.7, 0.02], [1, 0.014]], 6, 'skin', { bias: 0.012 }); // nariz
+    tube(add(J.neck, [0, 0, -0.04]), add(hd, mul(U, -0.06)), [[0, 0.07, 1.1], [1, 0.06]], 10, 'arm', { bias: -0.004, vRep: 0.3 }); // pescoço
     const HS = 1.16;
     ellip(hd, F, Sd, U, R * HS, R * HS * 0.97, R * HS, 18, 5, 'helm', { bias: 0.02, ph1: Math.PI * 0.36 });
     ellip(hd, F, Sd, U, R * HS, R * HS * 0.97, R * HS, 14, 6, 'helm', { bias: 0.02, ph0: Math.PI * 0.36, ph1: Math.PI * 0.8, la0: 0.78, la1: TAU - 0.78 });
     const brow = []; for (let i = 0; i <= 6; i++) brow.push(onHead(lerp(-1.05, 1.05, i / 6), Math.PI * 0.37, 1.19));
     chain(brow, brow.map(() => 0.024), 6, 'gold', { bias: 0.025 });
-    tube(onHead(0, Math.PI * 0.37, 1.2), onHead(0, Math.PI * 0.6, 1.19), [[0, 0.022], [1, 0.012]], 6, 'helm', { bias: 0.027 }); // protetor nasal
-    ellip(add(hd, add(mul(F, 0.075), mul(U, -0.115))), F, Sd, U, 0.07, 0.074, 0.042, 12, 6, 'jaw', { bias: 0.03 }); // máscara de maxilar (só o queixo)
+    if (!TX.faceImg) tube(onHead(0, Math.PI * 0.37, 1.2), onHead(0, Math.PI * 0.6, 1.19), [[0, 0.022], [1, 0.012]], 6, 'helm', { bias: 0.027 }); // protetor nasal
+    if (TX.faceImg) ellip(add(hd, add(mul(F, 0.03), mul(U, -0.165))), F, Sd, U, 0.075, 0.09, 0.03, 12, 6, 'jaw', { bias: 0.004 }); // gorjal de osso sob o queixo
+    else ellip(add(hd, add(mul(F, 0.075), mul(U, -0.115))), F, Sd, U, 0.07, 0.074, 0.042, 12, 6, 'jaw', { bias: 0.03 }); // máscara de maxilar (só o queixo)
     for (const sg of [-1, 1]) { // chifres curvos
       const b0 = onHead(sg * 1.45, Math.PI * 0.32, 1.1), sv = mul(Sd, sg);
       const p1 = add(b0, add(mul(sv, 0.09), mul(U, 0.05))), p2 = add(p1, add(add(mul(sv, 0.05), mul(U, 0.11)), mul(F, -0.03))), p3 = add(p2, add(mul(F, -0.12), mul(U, 0.05))), p4 = add(p3, add(mul(F, -0.08), mul(U, -0.04)));
@@ -901,18 +965,20 @@
     for (let i = 0; i < (fine ? 5 : 2); i++) { const ph = lerp(0.12, 0.62, i / 4) * Math.PI, la = Math.PI; // crista de vértebras na nuca
       tube(onHead(la, ph, 1.12), onHead(la, ph, 1.12 + 0.36 - 0.05 * i), [[0, 0.028], [0.5, 0.02], [1, 0.003]], 6, 'bone', { bias: 0.03 }); }
     const rg = this.rage > 0.05 ? this.rage : 0;
-    for (const sgn of [-1, 1]) { const la = sgn * 0.54, ph = Math.PI * 0.5;
+    if (!TX.faceImg || rg) for (const sgn of [-1, 1]) { const la = sgn * TX.eyeLa, ph = Math.PI * 0.5; // com rosto pintado, os olhos só acendem na Fúria
       glow(onHead(la, ph, 0.96), nHead(la, ph), 0.015 + 0.022 * rg, rg ? [255, 60 + (1 - rg) * 80 | 0, 20] : [255, 150, 40], 0.6 + 0.4 * rg, 0.03); }
 
     // ---------------- braços: malha, cotoveleira, braçadeira de osso, manopla; ombreiras em lâminas ----------------
     for (const sd of ['R', 'L']) {
       const sh = J['sh' + sd], el = J['el' + sd], ha = J['ha' + sd];
-      tube(sh, el, [[0, 0.07], [0.4, 0.073], [1, 0.058]], 10, 'mail');
+      tube(sh, el, [[0, 0.074], [0.2, 0.084, 1.05, 0.004], [0.5, 0.074, 1.12, -0.01], [0.75, 0.064, 1.05, -0.006], [1, 0.054]], 12, 'arm', { vRep: 0.6 }); // deltoide, bíceps e tríceps
+      ellip(add(sh, add(mul(norm(sub(sh, J.neck)), 0.025), [0, 0, -0.03])), norm(sub(el, sh)), fwd, norm(sub(sh, J.neck)), 0.07, 0.085, 0.08, 10, 6, 'arm', { bias: 0.002 });
+      tube(mix(sh, el, 0.58), mix(sh, el, 0.7), [[0, 0.079], [0.5, 0.081], [1, 0.077]], 12, 'leather', { bias: 0.004, vRep: 0.25 });
       const fa = norm(sub(ha, el)), ua = norm(sub(el, sh));
       ellip(el, ua, side, fa, 0.06, 0.062, 0.062, 8, 5, 'plate', { bias: 0.006 });
       if (fine) tube(el, add(el, mul(norm(sub(ua, fa)), 0.09)), [[0, 0.022], [1, 0.002]], 6, 'steel', { bias: 0.008 });
-      tube(el, ha, [[0, 0.066], [0.6, 0.064], [1, 0.05]], 10, 'bracer', { bias: 0.01 });
-      ellip(ha, fa, side, upv, 0.06, 0.056, 0.058, 8, 5, 'plate', { bias: 0.02 });
+      tube(el, ha, [[0, 0.064], [0.25, 0.07, 1.1, 0.004], [0.7, 0.054], [1, 0.047]], 10, 'bracer', { bias: 0.01 });
+      hand(sd, ha, fa);
       const out = norm(sub(sh, J.neck)), Up = norm(add(mul(out, 0.45), [0, 0, 1])), Fp = norm(cross(out, [0, 0, 1])), Sp = norm(cross(Up, Fp));
       for (let k = fine ? 2 : 1; k >= 0; k--) { // lâminas sobrepostas
         const pc = add(sh, add(mul(out, 0.03 + 0.04 * k), [0, 0, 0.05 - 0.055 * k]));
@@ -1006,7 +1072,7 @@
       c.beginPath();
       sp.forEach((q, i) => { const dx = q[0] - cx0, dy = q[1] - cy0, l = Math.hypot(dx, dy) || 1, ex = q[0] + dx / l * 0.6, ey = q[1] + dy / l * 0.6; i ? c.lineTo(ex, ey) : c.moveTo(ex, ey); });
       c.closePath();
-      const lit = 0.45 + 0.76 * Math.max(0, dot(n, LIGHT_W)) + 0.1 * n[2] + (f.tex === 'face' || f.tex === 'skin' ? 0.12 : 0);
+      const lit = 0.45 + 0.76 * Math.max(0, dot(n, LIGHT_W)) + 0.1 * n[2] + (f.tex === 'face' ? 0.24 : f.tex === 'skin' || f.tex === 'arm' ? 0.1 : 0);
       const img = TX[f.tex], pat = patFor(f.tex, clamp(Math.round((lit - 0.12) / 1.13 * (NL - 1)), 0, NL - 1)), last = f.pts.length - 1;
       const M = uvMatrix([f.uv[0][0] * img.width, f.uv[0][1] * img.height], [f.uv[1][0] * img.width, f.uv[1][1] * img.height], [f.uv[last][0] * img.width, f.uv[last][1] * img.height], S(f.pts[0]), S(f.pts[1]), S(f.pts[last]));
       if (M && pat.setTransform) { pat.setTransform(new DOMMatrix(M)); c.fillStyle = pat; } else c.fillStyle = FALLBACK[f.tex];
@@ -1119,5 +1185,6 @@
     this.update(dt, { moving: P.moving, facing: fac, phase: P.walk * 1.7 / 8 * TAU, vx: (P.vx || 0) / 100, vy: (P.vy || 0) / 100 });
   };
 
-  root.GuerreiroOsseo = { create: o => new Warrior(o), Warrior, WEAPONS, THEMES, project: proj };
+  if (root.GUERREIRO_IMAGENS) setImages(root.GUERREIRO_IMAGENS);
+  root.GuerreiroOsseo = { create: o => new Warrior(o), Warrior, WEAPONS, THEMES, project: proj, setImages, textures: buildTextures };
 })(typeof window !== 'undefined' ? window : globalThis);
