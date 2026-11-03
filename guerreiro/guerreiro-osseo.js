@@ -105,7 +105,8 @@
     hR: [0.24, -0.3, 0.24], hL: [0.3, 0.2, 0.36],
     fR: [-0.12, -0.15, 0], fL: [0.14, 0.17, 0],
     sp: -0.5, sy: -0.6, sr: 0, shN: [0.85, 0.45, 0.12],
-    rPitch: 0, rYaw: 0, rZ: 0, pivZ: 0.5, twoHand: 0, crouch: 0
+    rPitch: 0, rYaw: 0, rZ: 0, pivZ: 0.5, twoHand: 0, crouch: 0,
+    pY: 0, proll: 0, fpR: 0, fpL: 0 // deslocamento/rolagem da pelve e inclinação dos pés
   };
   const KEYS = Object.keys(BASE);
   const clone = p => { const o = {}; for (const k of KEYS) o[k] = Array.isArray(p[k]) ? p[k].slice() : p[k]; return o; };
@@ -378,7 +379,7 @@
       const imp = def.impact; if (imp != null && !a.fired && a.t >= imp * a.dur) { a.fired = true; this.emit('impact', a.name); }
       if (a.t >= a.dur && !def.hold) { this.emit('end', a.name); this.action = null; }
     }
-    this.pose = this.computePose();
+    this.pose = this.springPose(this.computePose(), dt);
     this.solve(this.pose);
     // panos (coordenadas do mundo centradas no personagem; o deslocamento dá inércia)
     const shift = [(inp.vx || 0) * dt, (inp.vy || 0) * dt, 0];
@@ -446,7 +447,8 @@
     const cur = BD.ossos.map((o, i) => {
       const n = o.nome, s = side[n[n.length - 1]], r = BD._rest[i];
       if (n === 'pelve') return frameOf(pelA, add(pelA, mul(J.pU, -r.L)), J.pF);
-      if (n === 'coluna') return frameOf(pelA, J.neck, J.tF);
+      if (n === 'lombar') return frameOf(pelA, J.spMid, J.lF);
+      if (n === 'torax') return frameOf(J.spMid, J.neck, J.tF);
       if (n === 'pescoco') return frameOf(J.neck, J.head, J.tF);
       if (n.startsWith('braco')) return frameOf(J['sh' + s], J['el' + s], J.tF);
       if (n.startsWith('antebraco')) return frameOf(J['el' + s], J['ha' + s], J.tF);
@@ -456,30 +458,60 @@
     });
     const T = (bi, p) => { const r = BD._rest[bi], c = cur[bi], q = sub(p, r.a), k = c.L / r.L;
       return add(c.a, add(add(mul(c.d, dot(q, r.d) * k), mul(c.e1, dot(q, r.e1))), mul(c.e2, dot(q, r.e2)))); };
-    const W = M.v.map((p, i) => { const [b1, w, b2] = M.w[i]; return w >= 0.999 ? T(b1, p) : mix(T(b2, p), T(b1, p), w); });
-    // sombreamento suave: normais de Newell por face somadas nos vértices; cada face usa a média das normais dos seus vértices
-    const FN = M.f.map(fc => { let n = [0, 0, 0]; for (let k = 0; k < fc.length; k++) { const a = W[fc[k]], b = W[fc[(k + 1) % fc.length]]; n = add(n, [(a[1] - b[1]) * (a[2] + b[2]), (a[2] - b[2]) * (a[0] + b[0]), (a[0] - b[0]) * (a[1] + b[1])]); } return n; });
-    const VN = M.v.map(() => [0, 0, 0]); M.f.forEach((fc, i) => fc.forEach(j => { VN[j] = add(VN[j], FN[i]); }));
-    M.f.forEach((fc, i) => {
-      let n = [0, 0, 0]; fc.forEach(j => { n = add(n, norm(VN[j])); });
-      if (dot(n, FN[i]) < 0) n = FN[i];                              // segurança em dobras
-      face(fc.map(j => W[j]), fc.map(j => M.uv[j]), M.pano[i] ? 'linen' : 'body', norm(n), { bias: 0 });
-    });
+    // malha com skinning: dois ossos por vértice; sombreamento suave pela média das normais de Newell dos vértices
+    const skin = (Mx, texOf, uvOf, bias) => {
+      const W = Mx.v.map((p, i) => { const [b1, w, b2] = Mx.w[i]; return w >= 0.999 ? T(b1, p) : mix(T(b2, p), T(b1, p), w); });
+      const FN = Mx.f.map(fc => { let n = [0, 0, 0]; for (let k = 0; k < fc.length; k++) { const a = W[fc[k]], b = W[fc[(k + 1) % fc.length]]; n = add(n, [(a[1] - b[1]) * (a[2] + b[2]), (a[2] - b[2]) * (a[0] + b[0]), (a[0] - b[0]) * (a[1] + b[1])]); } return n; });
+      const VN = Mx.v.map(() => [0, 0, 0]); Mx.f.forEach((fc, i) => fc.forEach(j => { VN[j] = add(VN[j], FN[i]); }));
+      Mx.f.forEach((fc, i) => {
+        let n = [0, 0, 0]; fc.forEach(j => { n = add(n, norm(VN[j])); });
+        if (dot(n, FN[i]) < 0) n = FN[i];                              // segurança em dobras
+        face(fc.map(j => W[j]), uvOf(fc, i), texOf(i), norm(n), { bias });
+      });
+    };
+    skin(M, i => (M.pano[i] ? 'linen' : 'body'), fc => fc.map(j => M.uv[j]), 0);
+    // armadura moldada: cascas tiradas da própria superfície do corpo, deslocadas pela espessura de cada peça
+    if (this.armor && BD.armadura) for (const pc of (lowDetail ? BD.armadura.baixa : BD.armadura.alta)) skin(pc, () => pc.tex, (fc, i) => pc.fu[i], 0.004);
+  };
+
+  // Ação sobreposta: cada parâmetro da pose segue o alvo por uma mola amortecida (ζ < 1). A cabeça e o tronco
+  // têm molas mais macias que as mãos e a arma, então chegam um pouco depois e assentam com leve rebote.
+  const SPR = { pz: 22, lean: 17, twist: 17, side: 13, hp: 10, hy: 10, hR: 30, hL: 24, sp: 34, sy: 34, sr: 26, shN: 16, crouch: 18, proll: 11, pY: 11 };
+  Warrior.prototype.springPose = function (raw, dt) {
+    if (!this.sps || this._noSpring) { this.sps = clone(raw); this.spv = {}; for (const k in SPR) this.spv[k] = Array.isArray(raw[k]) ? [0, 0, 0] : 0; return clone(raw); }
+    const out = clone(raw), n = Math.max(1, Math.ceil(dt * 34 / 0.35)), h = dt / n, z = 0.72;
+    for (const k in SPR) {
+      const w = SPR[k], arr = Array.isArray(raw[k]);
+      for (let c = 0; c < (arr ? 3 : 1); c++) {
+        let x = arr ? this.sps[k][c] : this.sps[k], v = arr ? this.spv[k][c] : this.spv[k]; const tg = arr ? raw[k][c] : raw[k];
+        for (let i = 0; i < n; i++) { v += (w * w * (tg - x) - 2 * z * w * v) * h; x += v * h; }
+        if (arr) { this.sps[k][c] = x; this.spv[k][c] = v; out[k][c] = x; } else { this.sps[k] = x; this.spv[k] = v; out[k] = x; }
+      }
+    }
+    return out;
   };
 
   Warrior.prototype.locoPose = function () {
     const p = clone(this.base), m = this.move, ph = this.phase, br = Math.sin(this.t * 2.2);
     p.pz += br * 0.008; p.lean += br * 0.01; p.hL[2] += br * 0.01; p.sp += br * 0.02; // respiração de guarda
+    const ws = Math.sin(this.t * 0.55) * (1 - m); // em guarda, o peso passa devagar de uma perna para a outra
+    p.pY += 0.02 * ws; p.proll += 0.04 * ws; p.side -= 0.03 * ws; p.hy -= 0.05 * ws;
     if (m < 0.01) return p;
     const S = 0.62 * m, lift = 0.16 * m;
+    // pé: apoio plano; no fim do apoio o calcanhar sobe (impulso pela ponta); no balanço a ponta desce e depois sobe
+    // para o calcanhar tocar primeiro. O tornozelo sobe o necessário para a ponta/calcanhar não entrarem no chão.
     const foot = (off, side) => {
-      let q = (ph + off) % TAU; if (q < 0) q += TAU;
-      if (q < Math.PI) return [S / 2 - S * (q / Math.PI), side, 0];
-      const u = (q - Math.PI) / Math.PI; return [-S / 2 + S * easeIO(u), side, lift * Math.sin(u * Math.PI)];
+      let q = (ph + off) % TAU; if (q < 0) q += TAU; let pos, fp;
+      if (q < Math.PI) { pos = [S / 2 - S * (q / Math.PI), side, 0]; fp = 0.45 * sstep(0.7 * Math.PI, Math.PI, q); }
+      else { const u = (q - Math.PI) / Math.PI; pos = [-S / 2 + S * easeIO(u), side, lift * Math.sin(u * Math.PI)]; fp = u < 0.35 ? 0.45 * (1 - u / 0.35) : -0.35 * Math.sin((u - 0.35) / 0.65 * Math.PI * 0.85); }
+      pos[2] += fp > 0 ? 0.17 * Math.sin(fp) : 0.06 * Math.sin(-fp);
+      return [pos, fp * m];
     };
-    p.fR = mix(p.fR, foot(0, -0.13), m); p.fL = mix(p.fL, foot(Math.PI, 0.13), m);
+    const [fR, fpR] = foot(0, -0.13), [fL, fpL] = foot(Math.PI, 0.13);
+    p.fR = mix(p.fR, fR, m); p.fL = mix(p.fL, fL, m); p.fpR = fpR; p.fpL = fpL;
+    p.proll += 0.07 * Math.sin(ph) * m; p.pY += 0.025 * Math.cos(ph) * m; p.side -= 0.04 * Math.sin(ph) * m; // quadril cai do lado do balanço
     p.pz = lerp(p.pz, 0.93 - 0.035 * Math.abs(Math.cos(ph)), m);
-    p.lean += 0.1 * m; p.twist = lerp(p.twist, 0.14 * Math.sin(ph), m);
+    p.lean += 0.04 * m; p.twist = lerp(p.twist, 0.14 * Math.sin(ph), m);
     p.hR = add(p.hR, [0.08 * Math.sin(ph + Math.PI) * m, 0, 0.03 * Math.cos(ph * 2) * m]);
     p.hL = add(p.hL, [0.06 * Math.sin(ph) * m, 0, 0]);
     p.sp -= (this.weapon === 'espada' ? 0.2 : 0.05) * m; p.hp += 0.05 * m;
@@ -499,19 +531,24 @@
     }
     if (this.shield && W.shieldAdj) { p.hR = add(p.hR, W.shieldAdj.hR); p.sp += W.shieldAdj.sp; } // lança com escudo: pegada por cima
     if (this.shield || !W.two) p.twoHand = 0;
+    p.hy -= 0.45 * p.twist; p.hp -= 0.3 * (p.lean - 0.08); // a cabeça compensa o tronco e mantém o olhar
     return p;
   };
 
   // pose -> articulações -> mundo
   Warrior.prototype.solve = function (p) {
     const W = WEAPONS[this.weapon];
-    const pel = [0, 0, p.pz];
+    const pel = [0, p.pY, p.pz];
     const T = mm(mm(Rz(p.twist), Ry(p.lean)), Rx(p.side));
-    const Pm = Rz(p.twist * 0.35);
+    const Pm = mm(Rz(p.twist * 0.35), Rx(p.proll));
+    const Tl = mm(Rz(p.twist * 0.45), Ry(p.lean * 0.45)); // a lombar faz ~45% da torção/flexão; o tórax completa
     const tp = v => add(pel, mv(T, v)), tv = v => mv(T, v);
     const L = {};
     L.pel = pel; L.chest = tp([0, 0, SK.torso * 0.72]);
-    L.shR = tp([0, -SK.shW, SK.torso - 0.04]); L.shL = tp([0, SK.shW, SK.torso - 0.04]);
+    // cintura escapular: o ombro sobe quando a mão sobe e avança quando a mão alcança à frente (clavícula/escápula)
+    const shoulder = (h, sg) => { const up = clamp((h[2] - 0.32) / 0.5, 0, 1), fw = clamp((h[0] - 0.25) / 0.4, 0, 1); return tp([0.035 * fw, sg * (SK.shW - 0.012 * fw), SK.torso - 0.04 + 0.045 * up]); };
+    L.shR = shoulder(p.hR, -1); L.shL = shoulder(p.hL, 1);
+    L.spMid = add(pel, mv(Tl, [0, 0, 0.23])); L.lF = mv(Tl, [1, 0, 0]);
     L.neck = tp([0, 0, SK.torso + 0.06]); // incisura jugular / C7
     const H = mm(T, mm(Rz(p.hy), Ry(p.hp)));
     L.head = add(L.neck, mv(H, [0.025, 0, SK.neck + 0.06])); // centro da cabeça na altura das orelhas (~12 cm acima de C7)
@@ -546,8 +583,9 @@
     const poleK = mv(Pm, [1, 0, 0.1]);
     [L.knR, L.anR] = ik(hipR, add(p.fR, [0, 0, SK.ankle]), SK.thigh, SK.shin, add(poleK, [0, -0.15, 0]));
     [L.knL, L.anL] = ik(hipL, add(p.fL, [0, 0, SK.ankle]), SK.thigh, SK.shin, add(poleK, [0, 0.15, 0]));
-    L.toR = add(L.anR, mv(Rz(-0.2), [0.18, 0, -0.06])); L.toL = add(L.anL, mv(Rz(0.2), [0.18, 0, -0.06]));
-    L.heR = add(L.anR, mv(Rz(-0.2), [-0.06, 0, -0.05])); L.heL = add(L.anL, mv(Rz(0.2), [-0.06, 0, -0.05])); // calcanhar
+    const fR = mm(Rz(-0.2), Ry(p.fpR)), fL = mm(Rz(0.2), Ry(p.fpL)); // inclinação do pé (ponta para baixo > 0)
+    L.toR = add(L.anR, mv(fR, [0.18, 0, -0.06])); L.toL = add(L.anL, mv(fL, [0.18, 0, -0.06]));
+    L.heR = add(L.anR, mv(fR, [-0.06, 0, -0.05])); L.heL = add(L.anL, mv(fL, [-0.06, 0, -0.05])); // calcanhar
     // âncoras dos panos
     L.capeA = []; for (let c = 0; c < 7; c++) L.capeA.push(tp([-0.13 - 0.06 * Math.sin(c / 6 * Math.PI), lerp(0.29, -0.29, c / 6), SK.torso - 0.05]));
     L.tabFA = [-1, -1 / 3, 1 / 3, 1].map(s => tp([0.17, s * 0.09, -0.02])); L.tabBA = [-1, -1 / 3, 1 / 3, 1].map(s => tp([-0.16, s * 0.09, -0.02]));
@@ -576,7 +614,7 @@
     const pit = Ry(p.rPitch), yaw = this.facing + p.rYaw, c = Math.cos(yaw), s = Math.sin(yaw), piv = p.pivZ;
     const P = v => { let q = mv(pit, [v[0], -v[1], v[2] - piv]); q = [q[0] + p.rootX, q[1], q[2] + piv + p.rZ]; return [q[0] * c - q[1] * s, q[0] * s + q[1] * c, q[2]]; };
     const V = v => { const q = mv(pit, [v[0], -v[1], v[2]]); return [q[0] * c - q[1] * s, q[0] * s + q[1] * c, q[2]]; };
-    const VEC = { hF: 1, hU: 1, hS: 1, dir: 1, edge: 1, shN: 1, shU: 1, tF: 1, tS: 1, tU: 1, pF: 1, pU: 1 };
+    const VEC = { hF: 1, hU: 1, hS: 1, dir: 1, edge: 1, shN: 1, shU: 1, tF: 1, tS: 1, tU: 1, pF: 1, pU: 1, lF: 1 };
     const map = v => (typeof v[0] === 'number' ? P(v) : Array.isArray(v) ? v.map(map) : { p: P(v.p), n: V(v.n) });
     const J = {}, L = this.L;
     for (const k in L) J[k] = VEC[k] ? V(L[k]) : map(L[k]);
@@ -985,7 +1023,7 @@
     const seg = n => Math.max(5, Math.round(n * (lowDetail ? 0.6 : 1.6)));
     const fine = !lowDetail; // detalhes minúsculos só aparecem de perto
     const fwd = J.tF, side = J.tS, upv = J.tU;
-    const atlas = !this.armor && !!root.GUERREIRO_CORPO, handTex = atlas ? 'body' : 'leather';
+    const atlas = !!root.GUERREIRO_CORPO, handTex = atlas && !this.armor ? 'body' : 'leather';
 
     const face = (pts, uv, tex, n, opt) => { opt = opt || {}; let cen = [0, 0, 0]; for (const p of pts) cen = add(cen, p); cen = mul(cen, 1 / pts.length); faces.push({ pts, uv, tex, n, two: opt.two, d: depthOf(cen) + (opt.bias || 0), poly: opt.poly }); };
     const basis = d => { const r = Math.abs(dot(d, fwd)) > 0.9 ? upv : fwd; const e1 = norm(cross(d, r)), e2 = cross(d, e1); return [e1, e2]; };
@@ -1098,7 +1136,10 @@
     ringMesh(J.torsoRings, J.pel, J.neck, 'torso', J.torsoV);
     if (fine) ellip(J.pouch, fwd, side, upv, 0.06, 0.04, 0.07, 8, 5, 'leather', { bias: 0.03 });
     glow(J.gemBelt.p, J.gemBelt.n, 0.028, th.gem, 0.9);
-    } else this.skinBody(face, lowDetail); // corpo inteiro do atlas anatômico, deformado pelo esqueleto
+    } else {
+      this.skinBody(face, lowDetail); // corpo inteiro do atlas anatômico (e armadura moldada), deformado pelo esqueleto
+      if (this.armor) { const capeRef = add(J.chest, mul(norm([fwd[0], fwd[1], 0]), 0.35)); clothMesh(this.cape, 'cape', 'clothIn', [capeRef[0], capeRef[1], J.pel[2]], true); }
+    }
 
     // ---------------- cabeça: crânio e rosto esculpidos, cabelo curto ----------------
     const hd = J.head, F = J.hF, U = J.hU, Sd = J.hS, eL = TX.eyeLa;

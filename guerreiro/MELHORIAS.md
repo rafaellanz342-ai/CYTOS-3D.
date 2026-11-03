@@ -185,6 +185,35 @@ O personagem agora começa **sem armadura**, com o corpo inteiro vindo do mesmo 
 
 **Desempenho:** cerca de 16 a 17 ms por quadro na escala do jogo (Chromium sem placa de vídeo).
 
+## Versão 9: movimento orgânico e armadura moldada sobre o corpo
+
+**Movimento orgânico e anatômico:**
+- **Coluna em dois segmentos:** a lombar faz cerca de 45% da torção e da flexão e o tórax completa, então o tronco curva em vez de girar como bloco. O skinning ganhou os ossos `lombar` (pelve até T12/L1) e `torax` (até C7), ligados às articulações reais do modelo.
+- **Cintura escapular:** o ombro sobe quando a mão sobe e avança quando a mão alcança à frente (clavícula e escápula).
+- **Quadril:** na guarda parada, o peso passa devagar de uma perna para a outra (desloca, rola e o tronco compensa). Na caminhada, a pelve cai do lado da perna em balanço.
+- **Rolamento do pé:** o calcanhar sobe no fim do apoio (impulso pela ponta), a ponta desce no início do balanço e sobe para o calcanhar tocar primeiro. O tornozelo sobe o necessário para nada entrar no chão.
+- **Cabeça:** compensa a torção e a inclinação do tronco e mantém o olhar à frente.
+- **Ação sobreposta:** cada parâmetro da pose segue o alvo por uma mola amortecida (ζ = 0,72). Tronco e cabeça têm molas mais macias que as mãos e a arma, então chegam um pouco depois e assentam com leve rebote. Os pés não usam mola, para ficarem plantados.
+
+**Armadura moldada (primeira versão).** `tools/mhbody.py` gera cada peça a partir da própria superfície do corpo do atlas. Seleciona a região pelo osso e pela posição ao longo dele, desloca para fora pela espessura da peça e copia os pesos de skinning. Assim cada peça acompanha músculos e articulações e não atravessa a pele.
+
+Peça | Material | Espessura
+---|---|---
+Couraça | ferro com costelas, esterno e clavículas em relevo, bandoleira e espinha | 1,8 cm
+Cinto | couro | 2,2 cm
+Saiote | malha | 2,4 cm
+Ombreiras | placa | 3,5 cm
+Cotoveleiras | placa | 2,2 cm
+Braçadeiras | osso com faixas douradas | 1,4 cm
+Coxotes | ferro | 1,7 cm
+Joelheiras | placa | 2,9 cm
+Grevas | osso com tira de couro | 1,7 cm
+Botas | couro | 1,1 cm
+
+A couraça usa o mesmo mapa da textura antiga (ângulo em volta do tronco × altura a partir do quadril). As demais peças usam UV cilíndrico no eixo do osso, com a costura tratada. A capa volta junto com a armadura. Ligue com `heroi.setArmor(true)`, que agora usa o corpo do atlas por baixo.
+
+**Desempenho:** cerca de 16 ms por quadro na escala do jogo, com armadura (Chromium sem placa de vídeo).
+
 ## Como ligar no jogo
 
 1. Cole o conteúdo de `guerreiro-osseo.js` em um `<script>` antes do script principal do jogo.
