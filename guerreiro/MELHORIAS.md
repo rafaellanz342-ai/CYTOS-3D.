@@ -99,7 +99,7 @@ Cada imagem entra como base da textura correspondente, e o código desenha por c
 
 > As texturas de metal, osso, couro, pele e tecido ainda não foram geradas: o Canva recusou os pedidos por limite de créditos ("cooling down"). Quando o limite liberar, basta gerá-las e adicioná-las em `guerreiro-imagens.js`.
 
-Para o jogo, inclua `guerreiro-imagens.js` **antes** de `guerreiro-osseo.js`.
+Para o jogo, inclua `guerreiro-imagens.js` (e, desde a versão 7, `guerreiro-cabeca.js`) **antes** de `guerreiro-osseo.js`.
 
 ## Versão 5: cabeça e corpo com proporções anatômicas
 
@@ -149,6 +149,24 @@ As feições da geometria ficam nos mesmos pontos do rosto gerado no Canva (olho
 - **Pernas:** calça de couro com quadríceps, isquiotibiais e panturrilha; greva fina de osso só sobre a tíbia; **botas de couro** com calcanhar, arco e dedos.
 - **Mãos em tamanho real:** palma de cerca de 8,5 cm, falanges finas (o dedo mínimo é menor) e polegar proporcional. O antebraço fica achatado no punho.
 - **Equipamento em escala real:** lâmina da espada com 0,88 m e escudo com 56 cm de diâmetro.
+
+## Versão 7: cabeça de um atlas 3D anatômico e cabelo com física
+
+**Base anatômica 3D.** A cabeça agora vem do **modelo-base do MakeHuman (hm08)**, uma malha humana construída sobre referências anatômicas e liberada em **domínio público (CC0)**. O Z-Anatomy e o BodyParts3D não puderam ser baixados desta sessão (bloqueados pela rede). O script `tools/mhhead.py` extrai do `base.obj`:
+- **Pele:** da cabeça e do pescoço, com crânio, testa, órbitas, nariz, lábios, queixo, mandíbula e orelhas reais, em dois níveis de detalhe (1.700 faces de perto e 464 no tamanho do jogo, por agrupamento de vértices).
+- **Globos oculares:** com textura de esclera, íris, pupila e reflexo especular.
+- **Couro cabeludo:** a partir da casca de cabelo do próprio modelo.
+- **Encaixe:** a malha é escalonada para 23 cm do topo ao queixo e posicionada na altura das orelhas.
+- **Projeção do rosto:** frontal, alinhada aos pontos do retrato do Canva (olhos, nariz, boca e queixo); a parte de trás recebe só pele.
+- **Saída:** tudo vai para `guerreiro-cabeca.js` (cerca de 110 KB), carregado antes do módulo. Sem esse arquivo, o módulo volta para a cabeça esculpida da versão 6.
+
+**Cabelo com textura, relevo e física:**
+- **Linha do cabelo recortada:** testa livre; desce nas têmporas e na nuca.
+- **Cerca de 60 mechas:** fitas que afinam até a ponta, com textura de fios de bordas transparentes e várias tonalidades, criando volume e relevo.
+- **Física Verlet por mecha:** inércia do corpo, gravidade e vento; uma mola devolve cada mecha ao penteado (para trás), e a colisão com o crânio impede que atravessem a cabeça. O cabelo balança ao andar, girar e golpear.
+- **Desempenho:** no tamanho do jogo, um terço das mechas é desenhado e o couro cabeludo é omitido. Medido: cerca de 18 a 20 ms por quadro num Chromium sem placa de vídeo.
+
+Para o jogo, inclua `guerreiro-imagens.js` e `guerreiro-cabeca.js` antes de `guerreiro-osseo.js`.
 
 ## Como ligar no jogo
 

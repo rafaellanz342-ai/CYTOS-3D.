@@ -386,6 +386,7 @@
     this.tabF.step(J.tabFA, dt, shift, legs, wind, J.pel);
     this.tabB.step(J.tabBA, dt, shift, legs, wind, J.pel);
     if (J.tasselA) this.tassel.step(J.tasselA, dt, shift, [], mul(wind, 2), J.tip);
+    this.hairStep(dt, shift, wind);
     // rastro da arma
     const tr = def && def.trail, an = a ? a.t / a.dur : 0;
     if (tr && an >= tr[0] && an <= tr[1]) this.trail.push({ tip: J.tip.slice(), mid: J.tmid.slice(), t: this.t });
@@ -394,6 +395,40 @@
       const f = this.fx[i]; f.t += dt;
       if (f.k === 'shard') { f.v[2] -= 12 * dt; f.p = add(f.p, mul(f.v, dt)); f.rot += f.vr * dt; if (f.p[2] < 0) { f.p[2] = 0; f.v = [f.v[0] * 0.4, f.v[1] * 0.4, -f.v[2] * 0.3]; f.vr *= 0.5; } }
       if (f.t > f.life) this.fx.splice(i, 1);
+    }
+  };
+
+  // cabelo: mechas de 4 segmentos que nascem no couro cabeludo da malha anatômica e são penteadas para trás.
+  // Cada nó sofre inércia (deslocamento do corpo), gravidade e vento; uma mola o puxa para o penteado em repouso
+  // e o crânio (elipsoide) o empurra para fora.
+  Warrior.prototype.hairStep = function (dt, shift, wind) {
+    const CABD = root.GUERREIRO_CABECA, J = this.J; if (!CABD || !J) return;
+    const hd = J.head, F = J.hF, Sd = J.hS, U = J.hU, toW = q => add(hd, add(add(mul(F, q[0]), mul(Sd, q[1])), mul(U, q[2])));
+    if (!CABD._roots) { // raízes: vértices do couro cabeludo acima da testa, espaçados
+      const vs = CABD.couro.v.filter(q => (q[2] > 0.075 - 0.5 * Math.max(0, 0.06 - q[0]) || q[0] < -0.02) && q[2] > -0.02).sort((a, b) => b[2] - a[2]), out = [];
+      for (const q of vs) if (out.every(o => Math.hypot(o[0] - q[0], o[1] - q[1], o[2] - q[2]) > 0.021)) out.push(q);
+      CABD._roots = out.slice(0, 60);
+    }
+    const SEG = 4, L = 0.026;
+    const rest = (q, i) => { // penteado em repouso, no referencial da cabeça
+      const o = norm([q[0] + 0.01, q[1], q[2] + 0.03]), comb = norm(add(mul(o, 0.12), [-0.9, q[1] * 0.9, -0.35])), pts = [mul(q, 1.03)];
+      for (let j = 1; j <= SEG; j++) { const d = norm(add(add(comb, mul(o, -0.25 * j)), [0, 0, -0.15 * j])); pts.push(add(pts[j - 1], mul(d, L * (0.9 + 0.2 * ((i * 7) % 5) / 5)))); } // cada segmento segue a curva do crânio
+      return pts;
+    };
+    if (!this.hair) this.hair = CABD._roots.map((q, i) => { const R0 = rest(q, i).map(toW); return { q, i, p: R0.map(x => x.slice()), o: R0.map(x => x.slice()), w: 0.02 + 0.007 * ((i * 3) % 4) / 3, u: ((i * 5) % 4) * 0.125 }; });
+    const g = -9.8 * dt * dt, damp = 0.9, stiff = 0.16;
+    for (const cl of this.hair) {
+      const R0 = rest(cl.q, cl.i).map(toW), P = cl.p, O = cl.o;
+      P[0] = R0[0]; O[0] = R0[0];
+      for (let j = 1; j <= SEG; j++) {
+        const p = P[j], o = O[j]; p[0] -= shift[0]; p[1] -= shift[1]; o[0] -= shift[0]; o[1] -= shift[1];
+        const v = [(p[0] - o[0]) * damp + wind[0] * dt * dt * 0.6, (p[1] - o[1]) * damp + wind[1] * dt * dt * 0.6, (p[2] - o[2]) * damp + g];
+        O[j] = p.slice(); P[j] = add(add(p, v), mul(sub(R0[j], add(p, v)), stiff * (1 - j / (SEG + 2))));
+      }
+      for (let it = 0; it < 3; it++) for (let j = 1; j <= SEG; j++) {
+        const d = sub(P[j], P[j - 1]), l = len(d) || 1e-6, rl = len(sub(R0[j], R0[j - 1])); P[j] = add(P[j - 1], mul(d, rl / l));
+        const c0 = add(hd, mul(U, 0.012)), r = sub(P[j], c0), m = Math.hypot(dot(r, F) / 0.108, dot(r, Sd) / 0.088, dot(r, U) / 0.122); if (m < 1) P[j] = add(c0, mul(r, 1 / (m || 1))); // crânio
+      }
     }
   };
 
@@ -749,6 +784,37 @@
       T.face = fc; T.eyeLa = 0.36; T.faceImg = true;
     }
     [c, g] = mkCanvas(64, 64); g.fillStyle = '#8a6a58'; g.fillRect(0, 0, 64, 64); noisePx(g, 64, 64, 18, rng(82)); T.skin = c;
+    // cabeça anatômica: o uv é o espaço do retrato (olhos em 0,333/0,667 × 0,287; boca 0,667; queixo 0,84)
+    [c, g] = mkCanvas(512, 512); R = rng(88); g.fillStyle = '#8a6a58'; g.fillRect(0, 0, 512, 512);
+    blotch(g, 512, 512, 60, ['rgba(120,70,56,.3)', 'rgba(60,38,30,.28)', 'rgba(210,170,150,.14)'], R, 10, 60);
+    for (let i = 0; i < 6000; i++) { g.fillStyle = `rgba(40,22,16,${R() * 0.2})`; g.fillRect(R() * 512, R() * 512, 1, 1); }
+    if (IMAGES.rosto) {
+      const [mc, mg] = mkCanvas(512, 512); mg.drawImage(IMAGES.rosto, 0, 0, 512, 512);
+      mg.globalCompositeOperation = 'destination-in'; mg.save(); mg.translate(256, 262); mg.scale(1, 1.42);
+      const gr = mg.createRadialGradient(0, 0, 120, 0, 0, 178); gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      mg.fillStyle = gr; mg.fillRect(-300, -300, 600, 600); mg.restore();
+      g.drawImage(mc, 0, 0);
+    } else {
+      for (const ex of [170, 342]) { const gr = g.createRadialGradient(ex, 147, 4, ex, 147, 34); gr.addColorStop(0, 'rgba(12,5,3,.9)'); gr.addColorStop(1, 'rgba(60,30,24,0)'); g.fillStyle = gr; g.fillRect(ex - 40, 107, 80, 80);
+        g.strokeStyle = '#1a0e08'; g.lineWidth = 9; g.lineCap = 'round'; g.beginPath(); g.moveTo(ex + (ex < 256 ? -26 : 26), 118); g.quadraticCurveTo(ex, 110, ex + (ex < 256 ? 22 : -22), 124); g.stroke(); }
+      g.fillStyle = 'rgba(20,8,6,.7)'; for (const s2 of [-1, 1]) { g.beginPath(); g.ellipse(256 + s2 * 12, 262, 7, 4, 0, 0, TAU); g.fill(); }
+      g.strokeStyle = 'rgba(40,14,12,.85)'; g.lineWidth = 4; g.beginPath(); g.moveTo(222, 342); g.quadraticCurveTo(256, 336, 290, 344); g.stroke();
+      for (let i = 0; i < 2500; i++) { g.fillStyle = `rgba(22,14,10,${0.2 + R() * 0.3})`; g.fillRect(170 + R() * 172, 320 + R() * 120, 1.5, 2); }
+    }
+    noisePx(g, 512, 512, 10, R); T.head = c;
+    // olho: esclera com veias, íris âmbar-acinzentada, pupila e reflexo
+    [c, g] = mkCanvas(64, 64); R = rng(89); g.fillStyle = '#d8cfc0'; g.fillRect(0, 0, 64, 64);
+    g.strokeStyle = 'rgba(150,40,40,.35)'; g.lineWidth = 0.6; for (let i = 0; i < 10; i++) { g.beginPath(); g.moveTo(R() * 64, R() < 0.5 ? 0 : 64); g.lineTo(32 + (R() - 0.5) * 20, 32 + (R() - 0.5) * 20); g.stroke(); }
+    { const gr = g.createRadialGradient(32, 32, 2, 32, 32, 12); gr.addColorStop(0, '#2a1a08'); gr.addColorStop(0.35, '#8a6a3a'); gr.addColorStop(0.8, '#5a6a6a'); gr.addColorStop(1, '#1a1410'); g.fillStyle = gr; g.beginPath(); g.arc(32, 32, 12, 0, TAU); g.fill(); }
+    g.fillStyle = '#050302'; g.beginPath(); g.arc(32, 32, 5, 0, TAU); g.fill(); g.fillStyle = 'rgba(255,255,255,.85)'; g.beginPath(); g.arc(28, 28, 2, 0, TAU); g.fill(); T.eye = c;
+    // mecha de cabelo: fios finos com pontas e bordas transparentes
+    [c, g] = mkCanvas(64, 128); R = rng(90);
+    for (let i = 0; i < 260; i++) { const x = 4 + R() * 56, l = 60 + R() * 68, cl = ['#3a2a1e', '#120b07', '#4e3a28', '#24180f', '#5e4632'][i % 5];
+      const gr = g.createLinearGradient(0, 0, 0, l); gr.addColorStop(0, cl); gr.addColorStop(0.85, cl); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.strokeStyle = gr; g.globalAlpha = 0.5 + R() * 0.5; g.lineWidth = 0.6 + R() * 0.9; g.beginPath(); g.moveTo(x, 0); g.quadraticCurveTo(x + (R() - 0.5) * 6, l * 0.5, x + (R() - 0.5) * 8, l); g.stroke(); }
+    g.globalAlpha = 1; g.globalCompositeOperation = 'destination-in';
+    { const gr = g.createLinearGradient(0, 0, 64, 0); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(0.2, 'rgba(0,0,0,1)'); gr.addColorStop(0.8, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 128); }
+    T.hairStrand = c;
     // cabelo curto e escuro: fios finos penteados para trás
     [c, g] = mkCanvas(256, 128); R = rng(87); g.fillStyle = '#1c1410'; g.fillRect(0, 0, 256, 128);
     for (let i = 0; i < 3500; i++) { const x = R() * 256, y = R() * 128, l = 4 + R() * 8; g.strokeStyle = ['#3a2a1e', '#0e0906', '#4a3626', '#261a12'][i % 4]; g.globalAlpha = 0.6; g.lineWidth = 0.7 + R() * 0.5; g.beginPath(); g.moveTo(x, y); g.lineTo(x + (R() - 0.5) * 2, y + l); g.stroke(); }
@@ -820,17 +886,17 @@
     T.theme = th;
     return (TEXCACHE[themeKey] = T);
   }
-  const FALLBACK = { bone: '#bca984', iron: '#2f2b30', plate: '#34303a', steel: '#5a5e66', gold: '#b8924e', mail: '#2a2426', leather: '#3e2618', wood: '#2e1c12', fur: '#2a1e14', horn: '#8a7458', cape: '#64101a', cloth: '#64101a', clothIn: '#26050a', torso: '#2c282e', face: '#8a6a58', skin: '#8a6a58', arm: '#8c6a56', hair: '#1c1410', helm: '#26232a', skull: '#cfbf9b', jaw: '#cfbf9b', bracer: '#c6b48e', greave: '#c6b48e', shield: '#64101a', shieldBack: '#3a2414', blade: '#d2c4a2' };
+  const FALLBACK = { bone: '#bca984', iron: '#2f2b30', plate: '#34303a', steel: '#5a5e66', gold: '#b8924e', mail: '#2a2426', leather: '#3e2618', wood: '#2e1c12', fur: '#2a1e14', horn: '#8a7458', cape: '#64101a', cloth: '#64101a', clothIn: '#26050a', torso: '#2c282e', face: '#8a6a58', skin: '#8a6a58', arm: '#8c6a56', hair: '#1c1410', head: '#8a6a58', eye: '#d8cfc0', hairStrand: '#2a1c12', helm: '#26232a', skull: '#cfbf9b', jaw: '#cfbf9b', bracer: '#c6b48e', greave: '#c6b48e', shield: '#64101a', shieldBack: '#3a2414', blade: '#d2c4a2' };
   // brilho especular e dureza por material
-  const SPEC = { iron: [0.6, 30], plate: [0.65, 30], helm: [0.65, 30], steel: [0.9, 44], gold: [0.9, 40], mail: [0.45, 10], bone: [0.18, 12], skull: [0.2, 12], jaw: [0.2, 12], horn: [0.3, 16], bracer: [0.25, 14], greave: [0.2, 12], torso: [0.5, 24], leather: [0.12, 8], blade: [0.35, 22], shield: [0.12, 10], face: [0.1, 8], skin: [0.1, 8], arm: [0.22, 10], hair: [0.2, 12] };
+  const SPEC = { iron: [0.6, 30], plate: [0.65, 30], helm: [0.65, 30], steel: [0.9, 44], gold: [0.9, 40], mail: [0.45, 10], bone: [0.18, 12], skull: [0.2, 12], jaw: [0.2, 12], horn: [0.3, 16], bracer: [0.25, 14], greave: [0.2, 12], torso: [0.5, 24], leather: [0.12, 8], blade: [0.35, 22], shield: [0.12, 10], face: [0.1, 8], skin: [0.1, 8], arm: [0.22, 10], hair: [0.2, 12], head: [0.14, 9], eye: [1.2, 60], hairStrand: [0.35, 18] };
 
   // textura pré-iluminada no nível L de NL (sombra fria ou luz quente da tocha)
   function shadedTex(TX, k, L, NL) {
     TX._lv = TX._lv || {}; const key = k + '@' + L; if (TX._lv[key]) return TX._lv[key];
     const src = TX[k], [c, g] = mkCanvas(src.width, src.height), f = 0.12 + L / (NL - 1) * 1.13;
-    g.drawImage(src, 0, 0);
+    g.drawImage(src, 0, 0); g.globalCompositeOperation = 'source-atop'; // preserva o alfa (mechas de cabelo)
     if (f < 1) { g.fillStyle = `rgba(10,6,10,${Math.min(0.92, (1 - f) * 0.97)})`; g.fillRect(0, 0, c.width, c.height); }
-    else { g.globalCompositeOperation = 'lighter'; g.fillStyle = `rgba(255,206,150,${Math.min(0.4, (f - 1) * 0.5)})`; g.fillRect(0, 0, c.width, c.height); }
+    else { g.fillStyle = `rgba(255,206,150,${Math.min(0.4, (f - 1) * 0.5)})`; g.fillRect(0, 0, c.width, c.height); }
     return (TX._lv[key] = c);
   }
   // matriz afim que leva o espaço da textura (px) ao triângulo na tela
@@ -1003,18 +1069,46 @@
         else face([a.p, b.p, cc.p, dd.p], [a.uv, b.uv, cc.uv, dd.uv], tex, n, opt);
       }
     };
-    sculpt((la, ph) => onHead(la, ph, 1, true), 28, 18, -Math.PI, Math.PI, 0, Math.PI * 0.94, 'face', { bias: 0.006 }); // cabeça com feições
+    const CABD = root.GUERREIRO_CABECA;
     // pescoço: esternocleidomastoideos e trapézio formam um tronco de cone achatado que entra sob a mandíbula
-    tube(add(J.neck, [0, 0, -0.05]), add(hd, add(mul(U, -0.05), mul(F, -0.015))), [[0, 0.085, 0.85], [0.4, 0.064, 1], [1, 0.057, 1.1]], 12, 'arm', { bias: -0.004, vRep: 0.3 });
-    // cabelo curto: casca fina sobre o crânio; a linha do cabelo sobe na testa, entra nas têmporas e desce na nuca
-    const hairline = la => { const L = Math.abs(la); return Math.PI * (L < 1.25 ? 0.3 + 0.1 * Math.pow(L / 1.25, 2) : 0.4 + 0.33 * sstep(1.25, 2.4, L)); };
-    const hairF = (la, t) => { const ph = t / Math.PI * hairline(la), q = headShape(la, ph, false, eL), k = 1 - 0.5 * (t / Math.PI); // mais volume no topo
-      return toW([q[0] * (1.02 + 0.02 * k), q[1] * (1.03 + 0.025 * k), q[2] * (1.02 + 0.03 * k) + 0.003]); };
-    sculpt(hairF, 28, 8, -Math.PI, Math.PI, 0, Math.PI, 'hair', { bias: 0.012 });
+    tube(add(J.neck, [0, 0, -0.05]), add(hd, add(mul(U, -0.07), mul(F, -0.015))), [[0, 0.085, 0.85], [0.4, 0.064, 1], [1, 0.057, 1.1]], 12, 'arm', { bias: -0.004, vRep: 0.3 });
+    if (CABD) {
+      // malha anatômica (MakeHuman, CC0): vértices no referencial da cabeça, normais por face pré-calculadas
+      const toV = n => add(add(mul(F, n[0]), mul(Sd, n[1])), mul(U, n[2]));
+      const meshLocal = (M, tex, bias, sc, off) => {
+        if (!M._n) M._n = M.f.map(fc => { const a = M.v[fc[0]], b = M.v[fc[1]], c2 = M.v[fc[2]]; return norm(cross(sub(b, a), sub(c2, a))); });
+        const k = sc || 1, o = off || [0, 0, 0], W = M.v.map(q => toW(add(mul(q, k), o)));
+        M.f.forEach((fc, i) => face(fc.map(j => W[j]), fc.map(j => M.uv[j]), tex, toV(M._n[i]), { bias }));
+      };
+      meshLocal(lowDetail ? CABD.baixa : CABD.alta, 'head', 0.006);
+      if (fine) for (const E of CABD.olhos) meshLocal(E, 'eye', 0.0055);
+      if (!CABD._couro) { const keep = q => q[2] > 0.072 - 0.5 * Math.max(0, 0.06 - q[0]) || q[0] < -0.02; // linha do cabelo: testa livre, desce nas têmporas e na nuca
+        const C2 = CABD.couro, f2 = C2.f.filter(fc => fc.every(j => keep(C2.v[j]))); CABD._couro = { v: C2.v, uv: C2.uv, f: f2 }; }
+      if (fine) meshLocal(CABD._couro, 'hair', 0.011, 1.03, [-0.004, 0, 0.004]);       // couro cabeludo (de longe, as mechas bastam)
+      // mechas com física (ver Warrior.prototype.hairStep)
+      const HS = this.hair; if (HS) HS.forEach((cl, ci) => {
+        if (lowDetail && ci % 3) return;
+        const P = cl.p, nN = P.length - 1;
+        for (let j = 0; j < nN; j++) {
+          const a = P[j], b = P[j + 1], w0 = cl.w * (1 - j / nN * 0.75), w1 = cl.w * (1 - (j + 1) / nN * 0.75), out = norm(sub(a, hd));
+          const sv = norm(cross(sub(b, a), out)), pts = [add(a, mul(sv, w0)), add(a, mul(sv, -w0)), add(b, mul(sv, -w1)), add(b, mul(sv, w1))];
+          let n = norm(cross(sv, sub(b, a))); if (dot(n, out) < 0) n = mul(n, -1);
+          face(pts, [[cl.u, j / nN], [cl.u + 0.5, j / nN], [cl.u + 0.5, (j + 1) / nN], [cl.u, (j + 1) / nN]], 'hairStrand', n, { two: true, bias: 0.013 + 0.0004 * ci });
+        }
+      });
+    } else {
+      sculpt((la, ph) => onHead(la, ph, 1, true), 28, 18, -Math.PI, Math.PI, 0, Math.PI * 0.94, 'face', { bias: 0.006 }); // cabeça com feições
+      const hairline = la => { const L = Math.abs(la); return Math.PI * (L < 1.25 ? 0.3 + 0.1 * Math.pow(L / 1.25, 2) : 0.4 + 0.33 * sstep(1.25, 2.4, L)); };
+      const hairF = (la, t) => { const ph = t / Math.PI * hairline(la), q = headShape(la, ph, false, eL), k = 1 - 0.5 * (t / Math.PI);
+        return toW([q[0] * (1.02 + 0.02 * k), q[1] * (1.03 + 0.025 * k), q[2] * (1.02 + 0.03 * k) + 0.003]); };
+      sculpt(hairF, 28, 8, -Math.PI, Math.PI, 0, Math.PI, 'hair', { bias: 0.012 });
+    }
     // trapézio: liga a base do pescoço aos ombros (sem degrau entre pescoço e couraça)
     for (const sd of ['R', 'L']) tube(add(J.neck, [0, 0, -0.025]), add(J['sh' + sd], [0, 0, 0.035]), [[0, 0.055, 0.8], [0.6, 0.05, 0.75], [1, 0.042, 0.7]], 10, 'arm', { bias: -0.006, vRep: 0.4 });
     const rg = this.rage > 0.05 ? this.rage : 0;
-    if (!TX.faceImg || rg) for (const sgn of [-1, 1]) { const la = sgn * eL, ph = Math.PI * 0.5, P = onHead(la, ph, 0.98, true); // olhos acendem na Fúria
+    if (CABD && rg) for (const E of CABD.olhos) { if (!E._c) { E._c = [0, 0, 0]; E.v.forEach(q => { E._c = add(E._c, mul(q, 1 / E.v.length)); }); } const P = toW(add(E._c, [0.012, 0, 0]));
+      glow(P, F, 0.012 + 0.02 * rg, [255, 60 + (1 - rg) * 80 | 0, 20], 0.5 + 0.5 * rg, 0.03); }
+    else if (!CABD && (!TX.faceImg || rg)) for (const sgn of [-1, 1]) { const la = sgn * eL, ph = Math.PI * 0.5, P = onHead(la, ph, 0.98, true); // olhos acendem na Fúria
       glow(P, norm(sub(P, hd)), 0.012 + 0.02 * rg, rg ? [255, 60 + (1 - rg) * 80 | 0, 20] : [255, 150, 40], 0.5 + 0.5 * rg, 0.03); }
 
     // ---------------- braços: malha, cotoveleira, braçadeira de osso, manopla; ombreiras em lâminas ----------------
@@ -1114,13 +1208,13 @@
       c.beginPath();
       sp.forEach((q, i) => { const dx = q[0] - cx0, dy = q[1] - cy0, l = Math.hypot(dx, dy) || 1, ex = q[0] + dx / l * 0.6, ey = q[1] + dy / l * 0.6; i ? c.lineTo(ex, ey) : c.moveTo(ex, ey); });
       c.closePath();
-      const lit = 0.45 + 0.76 * Math.max(0, dot(n, LIGHT_W)) + 0.1 * n[2] + (f.tex === 'face' ? 0.24 : f.tex === 'skin' || f.tex === 'arm' ? 0.1 : 0);
+      const lit = 0.45 + 0.76 * Math.max(0, dot(n, LIGHT_W)) + 0.1 * n[2] + (f.tex === 'face' || f.tex === 'head' ? 0.2 : f.tex === 'skin' || f.tex === 'arm' ? 0.1 : 0);
       const img = TX[f.tex], pat = patFor(f.tex, clamp(Math.round((lit - 0.12) / 1.13 * (NL - 1)), 0, NL - 1)), last = f.pts.length - 1;
       const M = uvMatrix([f.uv[0][0] * img.width, f.uv[0][1] * img.height], [f.uv[1][0] * img.width, f.uv[1][1] * img.height], [f.uv[last][0] * img.width, f.uv[last][1] * img.height], S(f.pts[0]), S(f.pts[1]), S(f.pts[last]));
       if (M && pat.setTransform) { pat.setTransform(new DOMMatrix(M)); c.fillStyle = pat; } else c.fillStyle = FALLBACK[f.tex];
       c.fill();
       const spc = SPEC[f.tex], hs = spc ? spc[0] * Math.pow(Math.max(0, dot(n, Hv)), spc[1]) : 0;
-      const rm = Math.pow(1 - clamp(dot(n, CAM), 0, 1), 3) * Math.max(0, -dot(n, LIGHT_W) + 0.3) * 0.6;
+      const rm = f.tex === 'hairStrand' || f.tex === 'hair' ? 0 : Math.pow(1 - clamp(dot(n, CAM), 0, 1), 3) * Math.max(0, -dot(n, LIGHT_W) + 0.3) * 0.6;
       if (hs > 0.05 || rm > 0.05) {
         c.globalCompositeOperation = 'lighter';
         if (hs > 0.05) { c.fillStyle = `rgba(255,240,220,${Math.min(0.85, hs).toFixed(2)})`; c.fill(); }
