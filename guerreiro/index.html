@@ -52,7 +52,8 @@ input[type=range]{width:100%;accent-color:#b98a45}
       <button class="btn on" data-w="espada">Espada</button>
       <button class="btn" data-w="lanca">Lança</button>
       <button class="btn" data-w="foice">Foice longa</button>
-      <button class="btn on" id="shieldBtn">Escudo</button>
+      <button class="btn" id="shieldBtn">Escudo</button>
+      <button class="btn" id="armorBtn">Armadura</button>
     </div>
     <div class="lbl">Golpes da arma <span style="opacity:.6">(Q troca a arma)</span></div>
     <div class="row">
@@ -103,6 +104,7 @@ input[type=range]{width:100%;accent-color:#b98a45}
 
 <script src="guerreiro-imagens.js"></script>
 <script src="guerreiro-cabeca.js"></script>
+<script src="guerreiro-corpo.js"></script>
 <script src="guerreiro-osseo.js"></script>
 <script>
 (() => {
@@ -134,7 +136,8 @@ input[type=range]{width:100%;accent-color:#b98a45}
     document.querySelectorAll('.btn.sh').forEach(b => b.disabled = !hero.shield);
     document.querySelectorAll('[data-name]').forEach(sp => sp.textContent = hero.moveName(sp.dataset.name));
   };
-  st.shield = true;
+  st.shield = false;
+  document.getElementById('armorBtn').addEventListener('click', e => { hero.setArmor(!hero.armor); e.currentTarget.classList.toggle('on', hero.armor); });
   document.querySelectorAll('#wpn [data-w]').forEach(b => b.addEventListener('click', () => setW(b.dataset.w)));
   document.getElementById('shieldBtn').addEventListener('click', () => { st.shield = !st.shield; setW(hero.weapon); });
   const swap = () => setW(ORDER[(ORDER.indexOf(hero.weapon) + 1) % 3]);

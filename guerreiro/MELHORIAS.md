@@ -166,7 +166,24 @@ As feições da geometria ficam nos mesmos pontos do rosto gerado no Canva (olho
 - **Física Verlet por mecha:** inércia do corpo, gravidade e vento; uma mola devolve cada mecha ao penteado (para trás), e a colisão com o crânio impede que atravessem a cabeça. O cabelo balança ao andar, girar e golpear.
 - **Desempenho:** no tamanho do jogo, um terço das mechas é desenhado e o couro cabeludo é omitido. Medido: cerca de 18 a 20 ms por quadro num Chromium sem placa de vídeo.
 
-Para o jogo, inclua `guerreiro-imagens.js` e `guerreiro-cabeca.js` antes de `guerreiro-osseo.js`.
+Para o jogo, inclua `guerreiro-imagens.js`, `guerreiro-cabeca.js` e `guerreiro-corpo.js` antes de `guerreiro-osseo.js`.
+
+## Versão 8: corpo inteiro do atlas anatômico, sem armadura
+
+O personagem agora começa **sem armadura**, com o corpo inteiro vindo do mesmo atlas da cabeça: o modelo-base do **MakeHuman hm08 (CC0)**. É a base para reconstruir a armadura por cima depois.
+
+- **Corpo:** `tools/mhbody.py` extrai do `base.obj` o tronco, os braços, as pernas e os pés, sem a cabeça (que vem de `guerreiro-cabeca.js`) e sem as mãos abertas do modelo. As mãos procedurais continuam, com pele e dedos fechados no cabo.
+- **Lados:** o modelo é espelhado para casar com o esqueleto do jogo (lado direito = mão da arma).
+- **Detalhe:** dois níveis, com 2.118 faces de perto e 654 no tamanho do jogo.
+- **Skinning:** 13 ossos (pelve, coluna, pescoço, braços, antebraços, coxas, canelas e pés) usam as articulações reais do modelo (os grupos `joint-*`). Cada vértice tem até 2 ossos com peso: o mais próximo e o vizinho perto das articulações (ombro, cotovelo, quadril, joelho, tornozelo, pescoço).
+- **Deformação:** a cada quadro, cada osso leva o vértice da pose de repouso (pose "A" do MakeHuman) para a pose animada. Ele estica só ao longo do eixo do osso, para casar os comprimentos com o esqueleto do jogo.
+- **Sombreamento suave:** normais por vértice somadas das faces vizinhas e 16 níveis de luz pré-calculados por textura.
+- **Pele e roupa:** textura procedural de pele no atlas UV do MakeHuman (aceita a imagem `pele` via `setImages`) e uma tanga de linho cru como única peça de roupa.
+- **Arquivo:** `guerreiro-corpo.js` tem cerca de 140 KB e é carregado antes do módulo.
+
+**Armadura opcional:** `GuerreiroOsseo.create({ armor: true })` ou `heroi.setArmor(true)` volta ao visual da versão 6 (couraça, ombreiras, capa etc.). Na demonstração há o botão **Armadura**, que começa desligado, e o escudo também começa desligado.
+
+**Desempenho:** cerca de 16 a 17 ms por quadro na escala do jogo (Chromium sem placa de vídeo).
 
 ## Como ligar no jogo
 

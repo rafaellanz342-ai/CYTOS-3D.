@@ -297,6 +297,7 @@
     this.tabB = new Cloth(4, 5, 0.08, 0.06);
     this.tassel = new Cloth(3, 5, 0.06, 0.02);
     this.theme = opts.theme || 'carmesim';
+    this.armor = !!opts.armor; // sem armadura: corpo anatômico do atlas (MakeHuman) como base
     this.trail = []; this.fx = []; this.on = opts.on || null;
     this.weapon = 'espada'; this.shield = true;
     this.setWeapon(opts.weapon || 'espada', opts.shield);
@@ -311,6 +312,7 @@
     this.base = merge(merge(clone(BASE), W.base), this.shield ? {} : (W.baseFree || {}));
   };
   Warrior.prototype.setShield = function (on) { this.setWeapon(this.weapon, on); };
+  Warrior.prototype.setArmor = function (on) { this.armor = !!on; };
   Warrior.prototype.setTheme = function (k) { this.theme = THEMES[k] ? k : 'carmesim'; };
   Warrior.prototype.moveName = function (k) { const W = WEAPONS[this.weapon]; return (W.names && W.names[k]) || (COMMON[k] && COMMON[k].names) || k; };
   Warrior.prototype.still = function () { return !!(this.action && this.action.def.still && this.action.t < this.action.dur); };
@@ -432,6 +434,39 @@
     }
   };
 
+  // ---------- skinning do corpo do atlas ----------
+  // Cada osso tem um referencial de repouso (no modelo MakeHuman) e um atual (no esqueleto animado):
+  // eixo do osso + vetor de referência (frente) ortogonalizado. Um vértice é levado do referencial de repouso
+  // para o atual, esticando só ao longo do eixo (para casar comprimentos), e misturado entre dois ossos.
+  const frameOf = (a, b, ref) => { const d = norm(sub(b, a)); let e1 = sub(ref, mul(d, dot(ref, d))); if (len(e1) < 1e-4) e1 = cross(d, [1, 0, 0]); e1 = norm(e1); return { a, d, e1, e2: cross(d, e1), L: len(sub(b, a)) }; };
+  Warrior.prototype.skinBody = function (face, lowDetail) {
+    const BD = root.GUERREIRO_CORPO, J = this.J, M = lowDetail ? BD.baixa : BD.alta;
+    if (!BD._rest) BD._rest = BD.ossos.map(o => frameOf(o.a, o.b, o.nome.startsWith('pe-') ? [0, 1, 0] : [0, 0, 1]));
+    const pelA = add(J.pel, mul(J.pU, 0.026)), side = { l: 'L', r: 'R' };
+    const cur = BD.ossos.map((o, i) => {
+      const n = o.nome, s = side[n[n.length - 1]], r = BD._rest[i];
+      if (n === 'pelve') return frameOf(pelA, add(pelA, mul(J.pU, -r.L)), J.pF);
+      if (n === 'coluna') return frameOf(pelA, J.neck, J.tF);
+      if (n === 'pescoco') return frameOf(J.neck, J.head, J.tF);
+      if (n.startsWith('braco')) return frameOf(J['sh' + s], J['el' + s], J.tF);
+      if (n.startsWith('antebraco')) return frameOf(J['el' + s], J['ha' + s], J.tF);
+      if (n.startsWith('coxa')) return frameOf(J['hip' + s], J['kn' + s], J.pF);
+      if (n.startsWith('canela')) return frameOf(J['kn' + s], J['an' + s], J.pF);
+      return frameOf(J['an' + s], J['to' + s], [0, 0, 1]);
+    });
+    const T = (bi, p) => { const r = BD._rest[bi], c = cur[bi], q = sub(p, r.a), k = c.L / r.L;
+      return add(c.a, add(add(mul(c.d, dot(q, r.d) * k), mul(c.e1, dot(q, r.e1))), mul(c.e2, dot(q, r.e2)))); };
+    const W = M.v.map((p, i) => { const [b1, w, b2] = M.w[i]; return w >= 0.999 ? T(b1, p) : mix(T(b2, p), T(b1, p), w); });
+    // sombreamento suave: normais de Newell por face somadas nos vértices; cada face usa a média das normais dos seus vértices
+    const FN = M.f.map(fc => { let n = [0, 0, 0]; for (let k = 0; k < fc.length; k++) { const a = W[fc[k]], b = W[fc[(k + 1) % fc.length]]; n = add(n, [(a[1] - b[1]) * (a[2] + b[2]), (a[2] - b[2]) * (a[0] + b[0]), (a[0] - b[0]) * (a[1] + b[1])]); } return n; });
+    const VN = M.v.map(() => [0, 0, 0]); M.f.forEach((fc, i) => fc.forEach(j => { VN[j] = add(VN[j], FN[i]); }));
+    M.f.forEach((fc, i) => {
+      let n = [0, 0, 0]; fc.forEach(j => { n = add(n, norm(VN[j])); });
+      if (dot(n, FN[i]) < 0) n = FN[i];                              // segurança em dobras
+      face(fc.map(j => W[j]), fc.map(j => M.uv[j]), M.pano[i] ? 'linen' : 'body', norm(n), { bias: 0 });
+    });
+  };
+
   Warrior.prototype.locoPose = function () {
     const p = clone(this.base), m = this.move, ph = this.phase, br = Math.sin(this.t * 2.2);
     p.pz += br * 0.008; p.lean += br * 0.01; p.hL[2] += br * 0.01; p.sp += br * 0.02; // respiração de guarda
@@ -530,7 +565,7 @@
     L.hipRings = [ring(-0.2, 0.185, 0.125, 0.14, Pm, 18), ring(-0.1, 0.178, 0.115, 0.135, Pm, 18), ring(0.0, 0.17, 0.11, 0.125, T, 18)];
     L.gemBelt = { p: tp([0.115, 0, 0.06]), n: tv([1, 0, 0]) };
     L.pouch = tp([0.03, -0.18, 0.02]);
-    L.tF = tv([1, 0, 0]); L.tS = tv([0, 1, 0]); L.tU = tv([0, 0, 1]);
+    L.tF = tv([1, 0, 0]); L.tS = tv([0, 1, 0]); L.tU = tv([0, 0, 1]); L.pF = mv(Pm, [1, 0, 0]); L.pU = mv(Pm, [0, 0, 1]);
     this.L = L;
     this.toWorld(p);
   };
@@ -541,7 +576,7 @@
     const pit = Ry(p.rPitch), yaw = this.facing + p.rYaw, c = Math.cos(yaw), s = Math.sin(yaw), piv = p.pivZ;
     const P = v => { let q = mv(pit, [v[0], -v[1], v[2] - piv]); q = [q[0] + p.rootX, q[1], q[2] + piv + p.rZ]; return [q[0] * c - q[1] * s, q[0] * s + q[1] * c, q[2]]; };
     const V = v => { const q = mv(pit, [v[0], -v[1], v[2]]); return [q[0] * c - q[1] * s, q[0] * s + q[1] * c, q[2]]; };
-    const VEC = { hF: 1, hU: 1, hS: 1, dir: 1, edge: 1, shN: 1, shU: 1, tF: 1, tS: 1, tU: 1 };
+    const VEC = { hF: 1, hU: 1, hS: 1, dir: 1, edge: 1, shN: 1, shU: 1, tF: 1, tS: 1, tU: 1, pF: 1, pU: 1 };
     const map = v => (typeof v[0] === 'number' ? P(v) : Array.isArray(v) ? v.map(map) : { p: P(v.p), n: V(v.n) });
     const J = {}, L = this.L;
     for (const k in L) J[k] = VEC[k] ? V(L[k]) : map(L[k]);
@@ -802,6 +837,16 @@
       for (let i = 0; i < 2500; i++) { g.fillStyle = `rgba(22,14,10,${0.2 + R() * 0.3})`; g.fillRect(170 + R() * 172, 320 + R() * 120, 1.5, 2); }
     }
     noisePx(g, 512, 512, 10, R); T.head = c;
+    // pele do corpo inteiro (o uv é o atlas do MakeHuman): tom curtido, poros, sardas, pequenas cicatrizes
+    [c, g] = mkCanvas(512, 512); R = rng(91); g.fillStyle = '#8c6a56'; g.fillRect(0, 0, 512, 512);
+    blotch(g, 512, 512, 80, ['rgba(120,70,56,.25)', 'rgba(60,38,30,.22)', 'rgba(210,170,150,.12)'], R, 10, 70);
+    for (let i = 0; i < 9000; i++) { g.fillStyle = `rgba(40,22,16,${R() * 0.18})`; g.fillRect(R() * 512, R() * 512, 1, 1); }
+    for (let i = 0; i < 10; i++) { const x = R() * 512, y = R() * 512, l = 10 + R() * 26, a = R() * TAU; g.strokeStyle = 'rgba(220,160,150,.45)'; g.lineWidth = 2; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke(); }
+    noisePx(g, 512, 512, 12, R); overlayImg(g, 512, 512, 'pele', 0.85, null, 256); T.body = c;
+    // tanga de linho cru (única peça quando está sem armadura)
+    [c, g] = mkCanvas(128, 128); R = rng(92); g.fillStyle = '#4a3a2a'; g.fillRect(0, 0, 128, 128);
+    g.globalAlpha = 0.18; g.fillStyle = '#000'; for (let y = 0; y < 128; y += 2) g.fillRect(0, y, 128, 1); g.fillStyle = '#fff'; g.globalAlpha = 0.08; for (let x = 0; x < 128; x += 2) g.fillRect(x, 0, 1, 128); g.globalAlpha = 1;
+    blotch(g, 128, 128, 6, ['rgba(0,0,0,.18)'], R, 10, 30); noisePx(g, 128, 128, 10, R); T.linen = c;
     // olho: esclera com veias, íris âmbar-acinzentada, pupila e reflexo
     [c, g] = mkCanvas(64, 64); R = rng(89); g.fillStyle = '#d8cfc0'; g.fillRect(0, 0, 64, 64);
     g.strokeStyle = 'rgba(150,40,40,.35)'; g.lineWidth = 0.6; for (let i = 0; i < 10; i++) { g.beginPath(); g.moveTo(R() * 64, R() < 0.5 ? 0 : 64); g.lineTo(32 + (R() - 0.5) * 20, 32 + (R() - 0.5) * 20); g.stroke(); }
@@ -886,9 +931,9 @@
     T.theme = th;
     return (TEXCACHE[themeKey] = T);
   }
-  const FALLBACK = { bone: '#bca984', iron: '#2f2b30', plate: '#34303a', steel: '#5a5e66', gold: '#b8924e', mail: '#2a2426', leather: '#3e2618', wood: '#2e1c12', fur: '#2a1e14', horn: '#8a7458', cape: '#64101a', cloth: '#64101a', clothIn: '#26050a', torso: '#2c282e', face: '#8a6a58', skin: '#8a6a58', arm: '#8c6a56', hair: '#1c1410', head: '#8a6a58', eye: '#d8cfc0', hairStrand: '#2a1c12', helm: '#26232a', skull: '#cfbf9b', jaw: '#cfbf9b', bracer: '#c6b48e', greave: '#c6b48e', shield: '#64101a', shieldBack: '#3a2414', blade: '#d2c4a2' };
+  const FALLBACK = { bone: '#bca984', iron: '#2f2b30', plate: '#34303a', steel: '#5a5e66', gold: '#b8924e', mail: '#2a2426', leather: '#3e2618', wood: '#2e1c12', fur: '#2a1e14', horn: '#8a7458', cape: '#64101a', cloth: '#64101a', clothIn: '#26050a', torso: '#2c282e', face: '#8a6a58', skin: '#8a6a58', arm: '#8c6a56', hair: '#1c1410', head: '#8a6a58', eye: '#d8cfc0', hairStrand: '#2a1c12', body: '#8c6a56', linen: '#6e5e48', helm: '#26232a', skull: '#cfbf9b', jaw: '#cfbf9b', bracer: '#c6b48e', greave: '#c6b48e', shield: '#64101a', shieldBack: '#3a2414', blade: '#d2c4a2' };
   // brilho especular e dureza por material
-  const SPEC = { iron: [0.6, 30], plate: [0.65, 30], helm: [0.65, 30], steel: [0.9, 44], gold: [0.9, 40], mail: [0.45, 10], bone: [0.18, 12], skull: [0.2, 12], jaw: [0.2, 12], horn: [0.3, 16], bracer: [0.25, 14], greave: [0.2, 12], torso: [0.5, 24], leather: [0.12, 8], blade: [0.35, 22], shield: [0.12, 10], face: [0.1, 8], skin: [0.1, 8], arm: [0.22, 10], hair: [0.2, 12], head: [0.14, 9], eye: [1.2, 60], hairStrand: [0.35, 18] };
+  const SPEC = { iron: [0.6, 30], plate: [0.65, 30], helm: [0.65, 30], steel: [0.9, 44], gold: [0.9, 40], mail: [0.45, 10], bone: [0.18, 12], skull: [0.2, 12], jaw: [0.2, 12], horn: [0.3, 16], bracer: [0.25, 14], greave: [0.2, 12], torso: [0.5, 24], leather: [0.12, 8], blade: [0.35, 22], shield: [0.12, 10], face: [0.1, 8], skin: [0.1, 8], arm: [0.22, 10], hair: [0.2, 12], head: [0.14, 9], eye: [1.2, 60], hairStrand: [0.35, 18], body: [0.16, 9], linen: [0.04, 6] };
 
   // textura pré-iluminada no nível L de NL (sombra fria ou luz quente da tocha)
   function shadedTex(TX, k, L, NL) {
@@ -930,7 +975,7 @@
     const themeKey = this.theme || 'carmesim', TX = buildTextures(themeKey), th = TX.theme;
     const c = this.cx;
     if (!bf.pat || bf.patTheme !== themeKey || bf.patTX !== TX) { bf.pat = {}; bf.patTheme = themeKey; bf.patTX = TX; }
-    const NL = 10, PAT = bf.pat;
+    const NL = 16, PAT = bf.pat; // níveis de luz pré-calculados por textura
     const patFor = (k, L) => { const key = k + L; let p = PAT[key]; if (p) return p; p = PAT[key] = c.createPattern(shadedTex(TX, k, L, NL), 'repeat'); return p; };
     c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, W, H); c.translate(ox, oy);
     c.lineJoin = c.lineCap = 'round';
@@ -940,6 +985,7 @@
     const seg = n => Math.max(5, Math.round(n * (lowDetail ? 0.6 : 1.6)));
     const fine = !lowDetail; // detalhes minúsculos só aparecem de perto
     const fwd = J.tF, side = J.tS, upv = J.tU;
+    const atlas = !this.armor && !!root.GUERREIRO_CORPO, handTex = atlas ? 'body' : 'leather';
 
     const face = (pts, uv, tex, n, opt) => { opt = opt || {}; let cen = [0, 0, 0]; for (const p of pts) cen = add(cen, p); cen = mul(cen, 1 / pts.length); faces.push({ pts, uv, tex, n, two: opt.two, d: depthOf(cen) + (opt.bias || 0), poly: opt.poly }); };
     const basis = d => { const r = Math.abs(dot(d, fwd)) > 0.9 ? upv : fwd; const e1 = norm(cross(d, r)), e2 = cross(d, e1); return [e1, e2]; };
@@ -1002,16 +1048,16 @@
       else { axis = norm(cross(fa, upv)); wrap = false; }
       let u = sub(mul(fa, -1), mul(axis, dot(mul(fa, -1), axis))); u = len(u) < 1e-4 ? norm(cross(axis, upv)) : norm(u); // dorso da mão, voltado para o braço
       const v = cross(axis, u), rg = wrap ? 0.028 : 0.02;
-      ellip(add(ha, mul(u, 0.026)), u, axis, v, 0.022, 0.043, 0.032, 8, 5, 'leather', { bias: 0.02 }); // palma (≈ 8,5 cm de largura)
+      ellip(add(ha, mul(u, 0.026)), u, axis, v, 0.022, 0.043, 0.032, 8, 5, handTex, { bias: 0.02 }); // palma (≈ 8,5 cm de largura)
       if (!fine) return;
       for (let i = 0; i < 4; i++) {
         const c0 = add(ha, mul(axis, -0.03 + i * 0.02)), pts = [], fr = i === 3 ? 0.85 : 1;
         for (const th of [0.15, 1.2, 2.3, 3.1]) pts.push(add(c0, add(mul(u, Math.cos(th) * (rg + 0.01)), mul(v, Math.sin(th) * (rg + 0.01)))));
-        chain(pts, [0.0105 * fr, 0.0098 * fr, 0.009 * fr, 0.0075 * fr], 6, 'leather', { bias: 0.022 }); // falanges
+        chain(pts, [0.0105 * fr, 0.0098 * fr, 0.009 * fr, 0.0075 * fr], 6, handTex, { bias: 0.022 }); // falanges
       }
       const t0 = add(ha, mul(axis, 0.042)), tp = [];
       for (const th of [0.3, -0.7, -1.5]) tp.push(add(t0, add(mul(u, Math.cos(th) * (rg + 0.011)), mul(v, Math.sin(th) * (rg + 0.011)))));
-      chain([add(ha, mul(u, 0.018)), ...tp], [0.013, 0.011, 0.0095, 0.008], 6, 'leather', { bias: 0.022 }); // polegar
+      chain([add(ha, mul(u, 0.018)), ...tp], [0.013, 0.011, 0.0095, 0.008], 6, handTex, { bias: 0.022 }); // polegar
     };
     const glow = (P, n, r, rgb, a, bias) => glows.push({ P, n, r, rgb, a, d: depthOf(P) + (bias || 0.02) });
 
@@ -1028,6 +1074,7 @@
         face([a, b, d, e], uv, out ? texO : texI, n, { two: true, bias: bias == null ? -0.015 : bias, poly });
       }
     };
+    if (!atlas) {
     const capeRef = add(J.chest, mul(norm([fwd[0], fwd[1], 0]), 0.35));
     clothMesh(this.cape, 'cape', 'clothIn', [capeRef[0], capeRef[1], J.pel[2]], true);
     clothMesh(this.tabF, 'cloth', 'clothIn', J.pel, true);
@@ -1051,6 +1098,7 @@
     ringMesh(J.torsoRings, J.pel, J.neck, 'torso', J.torsoV);
     if (fine) ellip(J.pouch, fwd, side, upv, 0.06, 0.04, 0.07, 8, 5, 'leather', { bias: 0.03 });
     glow(J.gemBelt.p, J.gemBelt.n, 0.028, th.gem, 0.9);
+    } else this.skinBody(face, lowDetail); // corpo inteiro do atlas anatômico, deformado pelo esqueleto
 
     // ---------------- cabeça: crânio e rosto esculpidos, cabelo curto ----------------
     const hd = J.head, F = J.hF, U = J.hU, Sd = J.hS, eL = TX.eyeLa;
@@ -1071,7 +1119,7 @@
     };
     const CABD = root.GUERREIRO_CABECA;
     // pescoço: esternocleidomastoideos e trapézio formam um tronco de cone achatado que entra sob a mandíbula
-    tube(add(J.neck, [0, 0, -0.05]), add(hd, add(mul(U, -0.07), mul(F, -0.015))), [[0, 0.085, 0.85], [0.4, 0.064, 1], [1, 0.057, 1.1]], 12, 'arm', { bias: -0.004, vRep: 0.3 });
+    if (!atlas) tube(add(J.neck, [0, 0, -0.05]), add(hd, add(mul(U, -0.07), mul(F, -0.015))), [[0, 0.085, 0.85], [0.4, 0.064, 1], [1, 0.057, 1.1]], 12, 'arm', { bias: -0.004, vRep: 0.3 });
     if (CABD) {
       // malha anatômica (MakeHuman, CC0): vértices no referencial da cabeça, normais por face pré-calculadas
       const toV = n => add(add(mul(F, n[0]), mul(Sd, n[1])), mul(U, n[2]));
@@ -1104,7 +1152,7 @@
       sculpt(hairF, 28, 8, -Math.PI, Math.PI, 0, Math.PI, 'hair', { bias: 0.012 });
     }
     // trapézio: liga a base do pescoço aos ombros (sem degrau entre pescoço e couraça)
-    for (const sd of ['R', 'L']) tube(add(J.neck, [0, 0, -0.025]), add(J['sh' + sd], [0, 0, 0.035]), [[0, 0.055, 0.8], [0.6, 0.05, 0.75], [1, 0.042, 0.7]], 10, 'arm', { bias: -0.006, vRep: 0.4 });
+    if (!atlas) for (const sd of ['R', 'L']) tube(add(J.neck, [0, 0, -0.025]), add(J['sh' + sd], [0, 0, 0.035]), [[0, 0.055, 0.8], [0.6, 0.05, 0.75], [1, 0.042, 0.7]], 10, 'arm', { bias: -0.006, vRep: 0.4 });
     const rg = this.rage > 0.05 ? this.rage : 0;
     if (CABD && rg) for (const E of CABD.olhos) { if (!E._c) { E._c = [0, 0, 0]; E.v.forEach(q => { E._c = add(E._c, mul(q, 1 / E.v.length)); }); } const P = toW(add(E._c, [0.012, 0, 0]));
       glow(P, F, 0.012 + 0.02 * rg, [255, 60 + (1 - rg) * 80 | 0, 20], 0.5 + 0.5 * rg, 0.03); }
@@ -1113,14 +1161,14 @@
 
     // ---------------- braços: malha, cotoveleira, braçadeira de osso, manopla; ombreiras em lâminas ----------------
     for (const sd of ['R', 'L']) {
-      const sh = J['sh' + sd], el = J['el' + sd], ha = J['ha' + sd];
+      const sh = J['sh' + sd], el = J['el' + sd], ha = J['ha' + sd], fa = norm(sub(ha, el)), ua = norm(sub(el, sh));
+      hand(sd, ha, fa);
+      if (atlas) continue;
       tube(sh, el, [[0, 0.074], [0.2, 0.084, 1.05, 0.004], [0.5, 0.074, 1.12, -0.01], [0.75, 0.064, 1.05, -0.006], [1, 0.054]], 12, 'arm', { vRep: 0.6 }); // deltoide, bíceps e tríceps
       ellip(add(sh, add(mul(norm(sub(sh, J.neck)), 0.02), [0, 0, -0.025])), norm(sub(el, sh)), fwd, norm(sub(sh, J.neck)), 0.055, 0.07, 0.065, 10, 6, 'arm', { bias: 0.002 }); // deltoide
       tube(mix(sh, el, 0.58), mix(sh, el, 0.7), [[0, 0.079], [0.5, 0.081], [1, 0.077]], 12, 'leather', { bias: 0.004, vRep: 0.25 });
-      const fa = norm(sub(ha, el)), ua = norm(sub(el, sh));
       ellip(add(el, mul(norm(sub(ua, fa)), 0.015)), ua, side, fa, 0.042, 0.048, 0.048, 8, 5, 'plate', { bias: 0.006 }); // cotoveleira
       tube(el, ha, [[0, 0.058], [0.25, 0.062, 1.15, 0.004], [0.7, 0.046, 1.2], [1, 0.038, 1.3]], 10, 'bracer', { bias: 0.01 }); // antebraço achatado no punho
-      hand(sd, ha, fa);
       const out = norm(sub(sh, J.neck)), Up = norm(add(mul(out, 0.45), [0, 0, 1])), Fp = norm(cross(out, [0, 0, 1])), Sp = norm(cross(Up, Fp));
       for (let k = 1; k >= 0; k--) { // ombreira discreta de duas lâminas
         const pc = add(sh, add(mul(out, 0.03 + 0.03 * k), [0, 0, 0.035 - 0.04 * k]));
@@ -1208,7 +1256,7 @@
       c.beginPath();
       sp.forEach((q, i) => { const dx = q[0] - cx0, dy = q[1] - cy0, l = Math.hypot(dx, dy) || 1, ex = q[0] + dx / l * 0.6, ey = q[1] + dy / l * 0.6; i ? c.lineTo(ex, ey) : c.moveTo(ex, ey); });
       c.closePath();
-      const lit = 0.45 + 0.76 * Math.max(0, dot(n, LIGHT_W)) + 0.1 * n[2] + (f.tex === 'face' || f.tex === 'head' ? 0.2 : f.tex === 'skin' || f.tex === 'arm' ? 0.1 : 0);
+      const lit = 0.45 + 0.76 * Math.max(0, dot(n, LIGHT_W)) + 0.1 * n[2] + (f.tex === 'face' || f.tex === 'head' ? 0.2 : f.tex === 'body' ? 0.08 : f.tex === 'skin' || f.tex === 'arm' ? 0.1 : 0);
       const img = TX[f.tex], pat = patFor(f.tex, clamp(Math.round((lit - 0.12) / 1.13 * (NL - 1)), 0, NL - 1)), last = f.pts.length - 1;
       const M = uvMatrix([f.uv[0][0] * img.width, f.uv[0][1] * img.height], [f.uv[1][0] * img.width, f.uv[1][1] * img.height], [f.uv[last][0] * img.width, f.uv[last][1] * img.height], S(f.pts[0]), S(f.pts[1]), S(f.pts[last]));
       if (M && pat.setTransform) { pat.setTransform(new DOMMatrix(M)); c.fillStyle = pat; } else c.fillStyle = FALLBACK[f.tex];
