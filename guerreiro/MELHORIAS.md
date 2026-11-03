@@ -136,6 +136,20 @@ As feições da geometria ficam nos mesmos pontos do rosto gerado no Canva (olho
 
 **Desempenho:** cerca de 19 ms por quadro na escala do jogo, num Chromium sem placa de vídeo.
 
+## Versão 6: sem elmo, armadura leve e tudo proporcional
+
+- **Cabeça descoberta:** saíram o elmo, os chifres, a crista e o gorjal. Entrou **cabelo curto** como uma casca fina que segue o crânio, com linha do cabelo natural: sobe na testa, entra nas têmporas e desce na nuca. O rosto esculpido e o retrato do Canva ficam à mostra.
+- **Pescoço e ombros:** o **trapézio** liga a base do pescoço aos ombros, sem degrau entre o pescoço e a couraça.
+- **Armadura mais leve e justa:**
+  - ombreira discreta de duas lâminas, sem espigões nem caveira;
+  - cotoveleira e joelheira pequenas, sem espigões;
+  - um tasset por lado;
+  - saiote de malha acompanhando o quadril;
+  - sem gola de pele.
+- **Pernas:** calça de couro com quadríceps, isquiotibiais e panturrilha; greva fina de osso só sobre a tíbia; **botas de couro** com calcanhar, arco e dedos.
+- **Mãos em tamanho real:** palma de cerca de 8,5 cm, falanges finas (o dedo mínimo é menor) e polegar proporcional. O antebraço fica achatado no punho.
+- **Equipamento em escala real:** lâmina da espada com 0,88 m e escudo com 56 cm de diâmetro.
+
 ## Como ligar no jogo
 
 1. Cole o conteúdo de `guerreiro-osseo.js` em um `<script>` antes do script principal do jogo.

@@ -57,7 +57,7 @@
   // cabeça 0,23 m; ombro (acrômio) a 1,51 m; mamilos a 2 cabeças do topo; umbigo a 3; púbis a 4 (metade da altura);
   // fêmur ≈ 2 cabeças; tíbia ≈ 2 cabeças menos o tornozelo; úmero ≈ 1,4 cabeça; antebraço ≈ 1,2; pé ≈ 1,15.
   const SK = { thigh: 0.46, shin: 0.44, ankle: 0.08, hipW: 0.09, torso: 0.55, shW: 0.2, neck: 0.06, headR: 0.115,
-    uarm: 0.32, farm: 0.27, blade: 1.0, shieldR: 0.31 };
+    uarm: 0.32, farm: 0.27, blade: 0.88, shieldR: 0.28 };
 
   // ---------- crânio e face esculpidos (não é uma esfera) ----------
   // la: longitude (0 = frente do rosto), ph: ângulo polar a partir do topo. Devolve [frente, lado, cima] em metros,
@@ -444,7 +444,7 @@
     L.shR = tp([0, -SK.shW, SK.torso - 0.04]); L.shL = tp([0, SK.shW, SK.torso - 0.04]);
     L.neck = tp([0, 0, SK.torso + 0.06]); // incisura jugular / C7
     const H = mm(T, mm(Rz(p.hy), Ry(p.hp)));
-    L.head = add(L.neck, mv(H, [0.025, 0, SK.neck + 0.075])); // centro da cabeça na altura das orelhas (~13 cm acima de C7)
+    L.head = add(L.neck, mv(H, [0.025, 0, SK.neck + 0.06])); // centro da cabeça na altura das orelhas (~12 cm acima de C7)
     L.hF = mv(H, [1, 0, 0]); L.hU = mv(H, [0, 0, 1]); L.hS = mv(H, [0, 1, 0]);
     // mão direita + direção da arma
     [L.elR, L.haR] = ik(L.shR, tp(p.hR), SK.uarm, SK.farm, tv([-0.45, -0.55, -0.5]));
@@ -492,7 +492,7 @@
     const TR = [[-0.08, 0.165, 0.1, 0.12], [0.0, 0.17, 0.108, 0.12], [0.08, 0.152, 0.102, 0.105], [0.16, 0.142, 0.1, 0.098], [0.24, 0.148, 0.108, 0.1],
       [0.32, 0.16, 0.115, 0.108], [0.4, 0.174, 0.122, 0.115], [0.46, 0.182, 0.128, 0.12], [0.52, 0.178, 0.12, 0.12], [0.57, 0.14, 0.085, 0.098], [0.61, 0.07, 0.056, 0.062]];
     L.torsoRings = TR.map(r => ring(r[0], r[1], r[2], r[3], T, 18)); this.torsoV = TR.map(r => (0.61 - r[0]) / 0.69);
-    L.hipRings = [ring(-0.2, 0.21, 0.15, 0.17, Pm, 18), ring(-0.1, 0.19, 0.13, 0.15, Pm, 18), ring(0.0, 0.175, 0.115, 0.128, T, 18)];
+    L.hipRings = [ring(-0.2, 0.185, 0.125, 0.14, Pm, 18), ring(-0.1, 0.178, 0.115, 0.135, Pm, 18), ring(0.0, 0.17, 0.11, 0.125, T, 18)];
     L.gemBelt = { p: tp([0.115, 0, 0.06]), n: tv([1, 0, 0]) };
     L.pouch = tp([0.03, -0.18, 0.02]);
     L.tF = tv([1, 0, 0]); L.tS = tv([0, 1, 0]); L.tU = tv([0, 0, 1]);
@@ -749,6 +749,10 @@
       T.face = fc; T.eyeLa = 0.36; T.faceImg = true;
     }
     [c, g] = mkCanvas(64, 64); g.fillStyle = '#8a6a58'; g.fillRect(0, 0, 64, 64); noisePx(g, 64, 64, 18, rng(82)); T.skin = c;
+    // cabelo curto e escuro: fios finos penteados para trás
+    [c, g] = mkCanvas(256, 128); R = rng(87); g.fillStyle = '#1c1410'; g.fillRect(0, 0, 256, 128);
+    for (let i = 0; i < 3500; i++) { const x = R() * 256, y = R() * 128, l = 4 + R() * 8; g.strokeStyle = ['#3a2a1e', '#0e0906', '#4a3626', '#261a12'][i % 4]; g.globalAlpha = 0.6; g.lineWidth = 0.7 + R() * 0.5; g.beginPath(); g.moveTo(x, y); g.lineTo(x + (R() - 0.5) * 2, y + l); g.stroke(); }
+    g.globalAlpha = 1; T.hair = c;
     // pele dos braços: tom curtido, veias, cicatrizes e pintura de guerra
     [c, g] = mkCanvas(256, 256); R = rng(86); g.fillStyle = '#8c6a56'; g.fillRect(0, 0, 256, 256);
     blotch(g, 256, 256, 30, ['rgba(120,70,56,.3)', 'rgba(60,38,30,.28)', 'rgba(210,170,150,.14)'], R, 8, 40);
@@ -816,9 +820,9 @@
     T.theme = th;
     return (TEXCACHE[themeKey] = T);
   }
-  const FALLBACK = { bone: '#bca984', iron: '#2f2b30', plate: '#34303a', steel: '#5a5e66', gold: '#b8924e', mail: '#2a2426', leather: '#3e2618', wood: '#2e1c12', fur: '#2a1e14', horn: '#8a7458', cape: '#64101a', cloth: '#64101a', clothIn: '#26050a', torso: '#2c282e', face: '#8a6a58', skin: '#8a6a58', arm: '#8c6a56', helm: '#26232a', skull: '#cfbf9b', jaw: '#cfbf9b', bracer: '#c6b48e', greave: '#c6b48e', shield: '#64101a', shieldBack: '#3a2414', blade: '#d2c4a2' };
+  const FALLBACK = { bone: '#bca984', iron: '#2f2b30', plate: '#34303a', steel: '#5a5e66', gold: '#b8924e', mail: '#2a2426', leather: '#3e2618', wood: '#2e1c12', fur: '#2a1e14', horn: '#8a7458', cape: '#64101a', cloth: '#64101a', clothIn: '#26050a', torso: '#2c282e', face: '#8a6a58', skin: '#8a6a58', arm: '#8c6a56', hair: '#1c1410', helm: '#26232a', skull: '#cfbf9b', jaw: '#cfbf9b', bracer: '#c6b48e', greave: '#c6b48e', shield: '#64101a', shieldBack: '#3a2414', blade: '#d2c4a2' };
   // brilho especular e dureza por material
-  const SPEC = { iron: [0.6, 30], plate: [0.65, 30], helm: [0.65, 30], steel: [0.9, 44], gold: [0.9, 40], mail: [0.45, 10], bone: [0.18, 12], skull: [0.2, 12], jaw: [0.2, 12], horn: [0.3, 16], bracer: [0.25, 14], greave: [0.2, 12], torso: [0.5, 24], leather: [0.12, 8], blade: [0.35, 22], shield: [0.12, 10], face: [0.1, 8], skin: [0.1, 8], arm: [0.22, 10] };
+  const SPEC = { iron: [0.6, 30], plate: [0.65, 30], helm: [0.65, 30], steel: [0.9, 44], gold: [0.9, 40], mail: [0.45, 10], bone: [0.18, 12], skull: [0.2, 12], jaw: [0.2, 12], horn: [0.3, 16], bracer: [0.25, 14], greave: [0.2, 12], torso: [0.5, 24], leather: [0.12, 8], blade: [0.35, 22], shield: [0.12, 10], face: [0.1, 8], skin: [0.1, 8], arm: [0.22, 10], hair: [0.2, 12] };
 
   // textura pré-iluminada no nível L de NL (sombra fria ou luz quente da tocha)
   function shadedTex(TX, k, L, NL) {
@@ -931,18 +935,17 @@
       else if (this.pose && this.pose.twoHand > 0.5) axis = J.dir;
       else { axis = norm(cross(fa, upv)); wrap = false; }
       let u = sub(mul(fa, -1), mul(axis, dot(mul(fa, -1), axis))); u = len(u) < 1e-4 ? norm(cross(axis, upv)) : norm(u); // dorso da mão, voltado para o braço
-      const v = cross(axis, u), rg = wrap ? 0.034 : 0.022;
-      ellip(add(ha, mul(u, 0.03)), u, axis, v, 0.03, 0.05, 0.035, 8, 5, 'leather', { bias: 0.02 });
+      const v = cross(axis, u), rg = wrap ? 0.028 : 0.02;
+      ellip(add(ha, mul(u, 0.026)), u, axis, v, 0.022, 0.043, 0.032, 8, 5, 'leather', { bias: 0.02 }); // palma (≈ 8,5 cm de largura)
       if (!fine) return;
       for (let i = 0; i < 4; i++) {
-        const c0 = add(ha, mul(axis, -0.033 + i * 0.022)), pts = [];
-        for (const th of [0.15, 1.2, 2.3, 3.2]) pts.push(add(c0, add(mul(u, Math.cos(th) * (rg + 0.012)), mul(v, Math.sin(th) * (rg + 0.012)))));
-        chain(pts, [0.0125, 0.012, 0.011, 0.009], 6, 'leather', { bias: 0.022 });
-        ellip(pts[0], u, axis, v, 0.013, 0.014, 0.012, 6, 4, 'plate', { bias: 0.024 }); // juntas da manopla
+        const c0 = add(ha, mul(axis, -0.03 + i * 0.02)), pts = [], fr = i === 3 ? 0.85 : 1;
+        for (const th of [0.15, 1.2, 2.3, 3.1]) pts.push(add(c0, add(mul(u, Math.cos(th) * (rg + 0.01)), mul(v, Math.sin(th) * (rg + 0.01)))));
+        chain(pts, [0.0105 * fr, 0.0098 * fr, 0.009 * fr, 0.0075 * fr], 6, 'leather', { bias: 0.022 }); // falanges
       }
-      const t0 = add(ha, mul(axis, 0.05)), tp = [];
-      for (const th of [0.3, -0.7, -1.6]) tp.push(add(t0, add(mul(u, Math.cos(th) * (rg + 0.014)), mul(v, Math.sin(th) * (rg + 0.014)))));
-      chain([add(ha, mul(u, 0.02)), ...tp], [0.016, 0.014, 0.012, 0.01], 6, 'leather', { bias: 0.022 });
+      const t0 = add(ha, mul(axis, 0.042)), tp = [];
+      for (const th of [0.3, -0.7, -1.5]) tp.push(add(t0, add(mul(u, Math.cos(th) * (rg + 0.011)), mul(v, Math.sin(th) * (rg + 0.011)))));
+      chain([add(ha, mul(u, 0.018)), ...tp], [0.013, 0.011, 0.0095, 0.008], 6, 'leather', { bias: 0.022 }); // polegar
     };
     const glow = (P, n, r, rgb, a, bias) => glows.push({ P, n, r, rgb, a, d: depthOf(P) + (bias || 0.02) });
 
@@ -964,30 +967,26 @@
     clothMesh(this.tabF, 'cloth', 'clothIn', J.pel, true);
     clothMesh(this.tabB, 'cloth', 'clothIn', J.pel, true);
 
-    // ---------------- pernas: coxote de placa, joelheira com espigão, greva de osso, sapato de placa ----------------
+    // ---------------- pernas: calça de couro, joelheira discreta, greva fina de osso, bota de couro ----------------
     for (const sd of ['R', 'L']) {
-      const hip = J['hip' + sd], kn = J['kn' + sd], an = J['an' + sd], to = J['to' + sd];
-      tube(hip, kn, [[0, 0.102], [0.3, 0.112, 1.08, -0.008], [0.65, 0.098, 1.1, -0.012], [0.9, 0.08], [1, 0.076]], 12, 'iron');
-      tube(kn, an, [[0, 0.07], [0.22, 0.08, 1.15, 0.018], [0.45, 0.074, 1.1, 0.014], [0.8, 0.052], [1, 0.047]], 12, 'greave', { bias: 0.005 });
-      tube(J['he' + sd], to, [[0, 0.04, 0.9], [0.2, 0.052, 0.95], [0.55, 0.05, 0.62], [0.85, 0.046, 0.5], [1, 0.03, 0.45]], 10, 'plate', { bias: 0.01, vRep: 0.8 }); // calcanhar, arco e dedos
-      tube(add(an, [0, 0, 0.04]), mix(J['he' + sd], to, 0.35), [[0, 0.056], [1, 0.052]], 10, 'plate', { bias: 0.012, vRep: 0.4 }); // tornozelo
-      const kc = add(kn, mul(fwd, 0.04));
-      ellip(kc, fwd, side, upv, 0.065, 0.075, 0.08, 10, 6, 'plate', { bias: 0.04 });
-      if (fine) tube(add(kc, mul(fwd, 0.05)), add(kc, add(mul(fwd, 0.13), [0, 0, 0.02])), [[0, 0.026], [1, 0.002]], 6, 'steel', { bias: 0.045 });
-      for (let k = 0; k < (fine ? 2 : 1); k++) { // tassetes: lâminas de placa sobrepostas no quadril
-        const tA = add(mix(hip, J.pel, -0.7 - k * 0.15), [0, 0, 0.07 - k * 0.07]), tB = add(mix(hip, kn, 0.32 + k * 0.08), mul(fwd, 0.02));
-        tube(tA, tB, [[0, 0.07 - k * 0.008], [0.6, 0.064 - k * 0.008], [1, 0.045]], 7, 'plate', { bias: 0.045 + k * 0.004 });
-      }
+      const hip = J['hip' + sd], kn = J['kn' + sd], an = J['an' + sd], to = J['to' + sd], he = J['he' + sd];
+      tube(hip, kn, [[0, 0.088], [0.25, 0.093, 1.05, -0.006], [0.6, 0.082, 1.08, -0.01], [0.88, 0.064], [1, 0.06]], 12, 'leather', { vRep: 0.8 }); // quadríceps e isquiotibiais
+      ellip(add(kn, mul(fwd, 0.028)), fwd, side, upv, 0.04, 0.054, 0.058, 10, 6, 'plate', { bias: 0.03 }); // joelheira
+      tube(kn, an, [[0, 0.058], [0.22, 0.068, 1.12, 0.016], [0.45, 0.062, 1.08, 0.012], [0.8, 0.043], [1, 0.039]], 12, 'leather', { vRep: 0.8 }); // gastrocnêmio e tendão
+      tube(add(mix(kn, an, 0.1), mul(fwd, 0.012)), add(mix(kn, an, 0.82), mul(fwd, 0.01)), [[0, 0.05, 0.5, -0.03], [0.5, 0.048, 0.5, -0.03], [1, 0.04, 0.5, -0.024]], 10, 'greave', { bias: 0.008 }); // greva sobre a tíbia
+      tube(he, to, [[0, 0.033, 0.95], [0.2, 0.043, 0.9], [0.55, 0.044, 0.62], [0.85, 0.039, 0.5], [1, 0.026, 0.45]], 10, 'leather', { bias: 0.01, vRep: 0.8 }); // calcanhar, arco e dedos
+      tube(add(an, [0, 0, 0.035]), mix(he, to, 0.32), [[0, 0.045], [1, 0.043]], 10, 'leather', { bias: 0.012, vRep: 0.4 }); // cano da bota
+      const tA = add(mix(hip, J.pel, -0.6), [0, 0, 0.06]), tB = add(mix(hip, kn, 0.3), mul(fwd, 0.02)); // tasset
+      tube(tA, tB, [[0, 0.055], [0.6, 0.05], [1, 0.034]], 8, 'plate', { bias: 0.045 });
     }
 
-    // ---------------- tronco: couraça (caixa torácica, bandoleira), saiote de malha, gola de pele, gorjal ----------------
+    // ---------------- tronco: couraça (caixa torácica, bandoleira) e saiote de malha ----------------
     ringMesh(J.hipRings, J.pel, J.neck, 'mail', [0, 0.5, 1], { bias: -0.01 });
     ringMesh(J.torsoRings, J.pel, J.neck, 'torso', J.torsoV);
     if (fine) ellip(J.pouch, fwd, side, upv, 0.06, 0.04, 0.07, 8, 5, 'leather', { bias: 0.03 });
-    ellip(add(add(J.neck, mul(fwd, -0.07)), [0, 0, -0.06]), fwd, side, upv, 0.15, 0.25, 0.08, 14, 6, 'fur', { bias: 0.002 });
     glow(J.gemBelt.p, J.gemBelt.n, 0.028, th.gem, 0.9);
 
-    // ---------------- cabeça: rosto, elmo aberto, protetor nasal, chifres, máscara de maxilar ----------------
+    // ---------------- cabeça: crânio e rosto esculpidos, cabelo curto ----------------
     const hd = J.head, F = J.hF, U = J.hU, Sd = J.hS, eL = TX.eyeLa;
     const toW = q => add(hd, add(add(mul(F, q[0]), mul(Sd, q[1])), mul(U, q[2])));
     const onHead = (la, ph, sc, feat) => toW(mul(headShape(la, ph, feat, eL), sc || 1));
@@ -1006,25 +1005,14 @@
     };
     sculpt((la, ph) => onHead(la, ph, 1, true), 28, 18, -Math.PI, Math.PI, 0, Math.PI * 0.94, 'face', { bias: 0.006 }); // cabeça com feições
     // pescoço: esternocleidomastoideos e trapézio formam um tronco de cone achatado que entra sob a mandíbula
-    tube(add(J.neck, [0, 0, -0.05]), add(hd, add(mul(U, -0.05), mul(F, -0.015))), [[0, 0.1, 0.8], [0.35, 0.068, 1], [1, 0.058, 1.1]], 12, 'arm', { bias: -0.004, vRep: 0.3 });
-    // elmo: acompanha o crânio (sem as feições), aberto na frente, com protetores de bochecha
-    const helmF = (la, ph) => { const q = headShape(la, ph, false, eL); return toW([q[0] * 1.12, q[1] * 1.14, q[2] * (q[2] > 0 ? 0.98 : 1.05) + 0.01]); }; // elmo justo ao crânio
-    sculpt(helmF, 24, 6, -Math.PI, Math.PI, 0, Math.PI * 0.4, 'helm', { bias: 0.02 });
-    sculpt(helmF, 18, 8, 0.95, TAU - 0.95, Math.PI * 0.4, Math.PI * 0.8, 'helm', { bias: 0.02 });
-    const nape = (la, ph) => { const t = (ph - Math.PI * 0.8) / (Math.PI * 0.14), q = headShape(la, Math.PI * 0.8, false, eL), o = norm([q[0], q[1], 0]);
-      return toW(add(add([q[0] * 1.14, q[1] * 1.16, q[2] * 1.05], mul(o, 0.035 * t)), [0, 0, -0.085 * t])); };
-    sculpt(nape, 14, 3, 1.7, TAU - 1.7, Math.PI * 0.8, Math.PI * 0.94, 'helm', { bias: 0.019 }); // proteção da nuca (aba que desce sobre o pescoço)
-    const brow = []; for (let i = 0; i <= 8; i++) brow.push(onHead(lerp(-1.05, 1.05, i / 8), Math.PI * 0.405, 1.16));
-    chain(brow, brow.map(() => 0.02), 6, 'gold', { bias: 0.025 });
-    if (!TX.faceImg) tube(onHead(0, Math.PI * 0.4, 1.16), onHead(0, Math.PI * 0.56, 1.22, true), [[0, 0.018], [1, 0.01]], 6, 'helm', { bias: 0.027 }); // protetor nasal
-    for (const sg of [-1, 1]) { // chifres curvos que nascem das têmporas do elmo
-      const b0 = onHead(sg * 1.45, Math.PI * 0.3, 1.1), sv = mul(Sd, sg);
-      const p1 = add(b0, add(mul(sv, 0.07), mul(U, 0.035))), p2 = add(p1, add(add(mul(sv, 0.035), mul(U, 0.08)), mul(F, -0.02))), p3 = add(p2, add(mul(F, -0.09), mul(U, 0.035))), p4 = add(p3, add(mul(F, -0.06), mul(U, -0.03)));
-      chain([b0, p1, p2, p3, p4], [0.034, 0.03, 0.022, 0.013, 0.003], 8, 'horn', { bias: 0.035 });
-    }
-    for (let i = 0; i < (fine ? 5 : 2); i++) { const ph = lerp(0.1, 0.55, i / 4) * Math.PI; // crista de vértebras sobre a nuca
-      tube(onHead(Math.PI, ph, 1.1), onHead(Math.PI, ph, 1.1 + 0.32 - 0.05 * i), [[0, 0.026], [0.5, 0.018], [1, 0.003]], 6, 'bone', { bias: 0.03 }); }
-    ellip(add(J.neck, add(mul(fwd, 0.01), [0, 0, -0.01])), fwd, side, upv, 0.085, 0.1, 0.035, 14, 6, 'plate', { bias: 0.003, ph0: 0.25 }); // gorjal de placa
+    tube(add(J.neck, [0, 0, -0.05]), add(hd, add(mul(U, -0.05), mul(F, -0.015))), [[0, 0.085, 0.85], [0.4, 0.064, 1], [1, 0.057, 1.1]], 12, 'arm', { bias: -0.004, vRep: 0.3 });
+    // cabelo curto: casca fina sobre o crânio; a linha do cabelo sobe na testa, entra nas têmporas e desce na nuca
+    const hairline = la => { const L = Math.abs(la); return Math.PI * (L < 1.25 ? 0.3 + 0.1 * Math.pow(L / 1.25, 2) : 0.4 + 0.33 * sstep(1.25, 2.4, L)); };
+    const hairF = (la, t) => { const ph = t / Math.PI * hairline(la), q = headShape(la, ph, false, eL), k = 1 - 0.5 * (t / Math.PI); // mais volume no topo
+      return toW([q[0] * (1.02 + 0.02 * k), q[1] * (1.03 + 0.025 * k), q[2] * (1.02 + 0.03 * k) + 0.003]); };
+    sculpt(hairF, 28, 8, -Math.PI, Math.PI, 0, Math.PI, 'hair', { bias: 0.012 });
+    // trapézio: liga a base do pescoço aos ombros (sem degrau entre pescoço e couraça)
+    for (const sd of ['R', 'L']) tube(add(J.neck, [0, 0, -0.025]), add(J['sh' + sd], [0, 0, 0.035]), [[0, 0.055, 0.8], [0.6, 0.05, 0.75], [1, 0.042, 0.7]], 10, 'arm', { bias: -0.006, vRep: 0.4 });
     const rg = this.rage > 0.05 ? this.rage : 0;
     if (!TX.faceImg || rg) for (const sgn of [-1, 1]) { const la = sgn * eL, ph = Math.PI * 0.5, P = onHead(la, ph, 0.98, true); // olhos acendem na Fúria
       glow(P, norm(sub(P, hd)), 0.012 + 0.02 * rg, rg ? [255, 60 + (1 - rg) * 80 | 0, 20] : [255, 150, 40], 0.5 + 0.5 * rg, 0.03); }
@@ -1033,24 +1021,17 @@
     for (const sd of ['R', 'L']) {
       const sh = J['sh' + sd], el = J['el' + sd], ha = J['ha' + sd];
       tube(sh, el, [[0, 0.074], [0.2, 0.084, 1.05, 0.004], [0.5, 0.074, 1.12, -0.01], [0.75, 0.064, 1.05, -0.006], [1, 0.054]], 12, 'arm', { vRep: 0.6 }); // deltoide, bíceps e tríceps
-      ellip(add(sh, add(mul(norm(sub(sh, J.neck)), 0.025), [0, 0, -0.03])), norm(sub(el, sh)), fwd, norm(sub(sh, J.neck)), 0.07, 0.085, 0.08, 10, 6, 'arm', { bias: 0.002 });
+      ellip(add(sh, add(mul(norm(sub(sh, J.neck)), 0.02), [0, 0, -0.025])), norm(sub(el, sh)), fwd, norm(sub(sh, J.neck)), 0.055, 0.07, 0.065, 10, 6, 'arm', { bias: 0.002 }); // deltoide
       tube(mix(sh, el, 0.58), mix(sh, el, 0.7), [[0, 0.079], [0.5, 0.081], [1, 0.077]], 12, 'leather', { bias: 0.004, vRep: 0.25 });
       const fa = norm(sub(ha, el)), ua = norm(sub(el, sh));
-      ellip(el, ua, side, fa, 0.06, 0.062, 0.062, 8, 5, 'plate', { bias: 0.006 });
-      if (fine) tube(el, add(el, mul(norm(sub(ua, fa)), 0.09)), [[0, 0.022], [1, 0.002]], 6, 'steel', { bias: 0.008 });
-      tube(el, ha, [[0, 0.064], [0.25, 0.07, 1.1, 0.004], [0.7, 0.054], [1, 0.047]], 10, 'bracer', { bias: 0.01 });
+      ellip(add(el, mul(norm(sub(ua, fa)), 0.015)), ua, side, fa, 0.042, 0.048, 0.048, 8, 5, 'plate', { bias: 0.006 }); // cotoveleira
+      tube(el, ha, [[0, 0.058], [0.25, 0.062, 1.15, 0.004], [0.7, 0.046, 1.2], [1, 0.038, 1.3]], 10, 'bracer', { bias: 0.01 }); // antebraço achatado no punho
       hand(sd, ha, fa);
       const out = norm(sub(sh, J.neck)), Up = norm(add(mul(out, 0.45), [0, 0, 1])), Fp = norm(cross(out, [0, 0, 1])), Sp = norm(cross(Up, Fp));
-      for (let k = fine ? 2 : 1; k >= 0; k--) { // lâminas sobrepostas
-        const pc = add(sh, add(mul(out, 0.035 + 0.032 * k), [0, 0, 0.045 - 0.045 * k]));
-        ellip(pc, Fp, Sp, Up, 0.118 - 0.008 * k, 0.112 - 0.007 * k, 0.09 - 0.01 * k, 14, 6, 'plate', { bias: 0.07 - 0.004 * k, ph1: Math.PI * 0.62 });
+      for (let k = 1; k >= 0; k--) { // ombreira discreta de duas lâminas
+        const pc = add(sh, add(mul(out, 0.03 + 0.03 * k), [0, 0, 0.035 - 0.04 * k]));
+        ellip(pc, Fp, Sp, Up, 0.095 - 0.008 * k, 0.09 - 0.007 * k, 0.07 - 0.008 * k, 14, 6, 'plate', { bias: 0.07 - 0.004 * k, ph1: Math.PI * 0.6 });
       }
-      const top = add(sh, add(mul(out, 0.03), [0, 0, 0.05])), back = mul(fwd, -1);
-      for (let k = 0; k < 2; k++) { const dv = norm(add(add(out, mul(Up, 1.1 - k * 0.35)), mul(back, 0.35 + k * 0.5)));
-        chain([add(top, mul(dv, 0.06)), add(top, mul(dv, 0.14)), add(add(top, mul(dv, 0.21 - k * 0.03)), mul(back, 0.03))], [0.028, 0.017, 0.003], 7, 'bone', { bias: 0.075 }); }
-      const sk = add(top, add(mul(out, 0.1), mul(Up, -0.02))); // caveira na ombreira
-      ellip(sk, out, norm(cross(Up, out)), Up, 0.04, 0.036, 0.04, 10, 6, 'skull', { bias: 0.08 });
-      glow(add(sk, mul(out, 0.05)), out, 0.02, th.gem, 0.7, 0.085);
     }
 
     // ---------------- arma equipada ----------------
