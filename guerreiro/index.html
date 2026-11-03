@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Guerreiro Ósseo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#070506;--gold:#b98a45;--gold2:#e2bd72;--goldhi:#ffe3a3;--bone:#e8dcc0;--blood:#8a1620;--text:#e6dbc6;--muted:#a3937e;--fs:'Cinzel',Georgia,serif;--fb:'IM Fell English',Georgia,serif}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:#050304;color:var(--text);font-family:var(--fb);user-select:none;-webkit-user-select:none;touch-action:none}
+canvas#cv{position:fixed;inset:0;display:block}
+.frame{background:linear-gradient(180deg,rgba(29,21,23,.92),rgba(16,11,12,.92));border:1px solid #6b5233;box-shadow:0 0 0 1px #000,0 0 0 3px #2a2022,0 0 0 4px #7d6038,0 10px 30px rgba(0,0,0,.7)}
+h1{font-family:var(--fs);font-weight:700;letter-spacing:.14em;color:var(--gold2);text-transform:uppercase;font-size:15px;margin:0 0 2px}
+.sub{color:var(--muted);font-style:italic;font-size:13px;margin:0 0 10px}
+#panel{position:fixed;top:12px;left:12px;width:262px;padding:14px;z-index:5;max-height:calc(100% - 24px);overflow:auto}
+#panel.min .body{display:none}
+.lbl{font-family:var(--fs);font-size:10.5px;letter-spacing:.12em;color:var(--gold);text-transform:uppercase;margin:12px 0 6px}
+.row{display:flex;flex-wrap:wrap;gap:6px}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+.btn{font-family:var(--fs);font-weight:700;letter-spacing:.06em;font-size:11px;padding:7px 9px;color:#f4e2bb;background:linear-gradient(180deg,#4a2a22,#2a1513);border:1px solid #9a6d3a;box-shadow:inset 0 1px 0 rgba(255,220,160,.2),0 2px 0 #000;border-radius:2px}
+.btn:hover{filter:brightness(1.2)} .btn:active{transform:translateY(1px)}
+.btn.on{color:#2a1606;background:linear-gradient(180deg,#ffe3a3,#c79a4b 60%,#8a5f22);border-color:#3a2408}
+.btn kbd{font-family:var(--fb);opacity:.65;font-size:10px;margin-left:3px}
+input[type=range]{width:100%;accent-color:#b98a45}
+.hint{font-size:12.5px;color:var(--muted);line-height:1.45}
+#toggle{position:absolute;top:10px;right:10px;font-family:var(--fs);color:var(--gold2);font-size:13px;padding:2px 6px}
+#inset{position:fixed;right:12px;top:12px;width:150px;padding:8px 8px 6px;z-index:5;text-align:center}
+#inset canvas{width:134px;height:150px;display:block}
+#inset .lbl{margin:4px 0 0;font-size:9.5px}
+/* controles de toque */
+#joy{position:fixed;left:22px;bottom:calc(22px + env(safe-area-inset-bottom,0px));width:124px;height:124px;border-radius:50%;border:1px solid rgba(185,138,69,.55);background:radial-gradient(circle,rgba(0,0,0,.15),rgba(0,0,0,.45));z-index:6;display:none}
+#joy i{position:absolute;left:50%;top:50%;width:52px;height:52px;margin:-26px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#ffe3a3,#b98a45 55%,#4a2f12);box-shadow:0 0 0 2px #000}
+#acts{position:fixed;right:16px;bottom:calc(18px + env(safe-area-inset-bottom,0px));display:none;grid-template-columns:repeat(3,58px);gap:8px;z-index:6}
+#acts button{width:58px;height:58px;border-radius:50%;font-family:var(--fs);font-size:9px;font-weight:700;letter-spacing:.04em;color:#f4e2bb;background:radial-gradient(circle at 40% 30%,#6a3a2c,#2a1513 70%);border:1px solid #9a6d3a;box-shadow:0 0 0 2px #000,inset 0 1px 0 rgba(255,220,160,.25)}
+#acts button.big{background:radial-gradient(circle at 40% 30%,#b8262f,#4a0a10 70%)}
+@media (pointer:coarse){#joy{display:block}#acts{display:grid}#panel{width:220px;padding:10px}#panel:not(.open) .body{display:none}#inset{display:none}}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<div id="panel" class="frame">
+  <button id="toggle" aria-label="Mostrar ou esconder o painel">☰</button>
+  <h1>Guerreiro Ósseo</h1>
+  <p class="sub">Ortopedista de Guerra · 2.5D procedural</p>
+  <div class="body">
+    <div class="lbl">Habilidades</div>
+    <div class="row">
+      <button class="btn" data-act="golpe">Golpe Cortical<kbd>J</kbd></button>
+      <button class="btn" data-act="esmagar">Esmagar<kbd>1</kbd></button>
+      <button class="btn" data-act="investida">Investida<kbd>2</kbd></button>
+      <button class="btn" data-act="brado">Brado<kbd>3</kbd></button>
+      <button class="btn" data-act="redemoinho">Redemoinho<kbd>4</kbd></button>
+      <button class="btn" data-act="rolar">Esquiva<kbd>Espaço</kbd></button>
+      <button class="btn" data-act="dano">Dano<kbd>H</kbd></button>
+      <button class="btn" data-act="morte">Morte / Reviver<kbd>K</kbd></button>
+    </div>
+    <div class="lbl">Arma (raridade)</div>
+    <div class="row" id="rar">
+      <button class="btn on" data-r="">Comum</button>
+      <button class="btn" data-r="#6c9bff">Mágico</button>
+      <button class="btn" data-r="#ffd94a">Raro</button>
+      <button class="btn" data-r="#ff8a1e">Lendário</button>
+    </div>
+    <div class="lbl">Câmera</div>
+    <div class="row"><button class="btn" id="spin">Girar 360°</button><button class="btn" id="walkBtn">Andar em círculo</button></div>
+    <div class="lbl">Zoom</div>
+    <input type="range" id="zoom" min="60" max="260" value="150">
+    <p class="hint">Mover: <b>WASD</b> ou setas · clique = golpe.<br>No celular: joystick à esquerda e botões à direita.</p>
+  </div>
+</div>
+
+<div id="inset" class="frame"><canvas id="mini" width="268" height="300"></canvas><div class="lbl">Tamanho no jogo · 118 px</div></div>
+
+<div id="joy"><i></i></div>
+<div id="acts">
+  <button data-act="esmagar">Esmagar</button><button data-act="investida">Investida</button><button data-act="brado">Brado</button>
+  <button data-act="rolar">Esquiva</button><button data-act="redemoinho">Rede-moinho</button><button data-act="golpe" class="big">Golpe</button>
+</div>
+
+<script src="guerreiro-osseo.js"></script>
+<script>
+(() => {
+  const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+  const mini = document.getElementById('mini'), mctx = mini.getContext('2d');
+  const hero = GuerreiroOsseo.create({ scale: 150, facing: 0.5 });
+  const proj = GuerreiroOsseo.project;
+  let W = 0, H = 0, DPR = 1;
+  function resize() { DPR = Math.min(2, window.devicePixelRatio || 1); W = innerWidth; H = innerHeight; cv.width = W * DPR; cv.height = H * DPR; cv.style.width = W + 'px'; cv.style.height = H + 'px'; }
+  addEventListener('resize', resize); resize();
+
+  const st = { x: 0, y: 0, rar: '', spin: false, circle: false, zoom: 150, joy: [0, 0], keys: {} , dash: null };
+
+  // ---------- entrada ----------
+  const ACT = name => {
+    if (name === 'morte') { hero.play(hero.dead ? 'reviver' : 'morte'); return; }
+    if (hero.dead) return;
+    const d = hero.play(name);
+    if (!d) return;
+    if (name === 'rolar') st.dash = { t: d, v: 5.5 };
+    if (name === 'investida') st.dash = { t: d * 0.85, v: 7 };
+  };
+  addEventListener('keydown', e => {
+    const k = e.key.toLowerCase(); st.keys[k] = true;
+    const m = { j: 'golpe', '1': 'esmagar', '2': 'investida', '3': 'brado', '4': 'redemoinho', ' ': 'rolar', h: 'dano', k: 'morte' }[k];
+    if (m && !e.repeat) { ACT(m); e.preventDefault(); }
+  });
+  addEventListener('keyup', e => { st.keys[e.key.toLowerCase()] = false; });
+  cv.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse') ACT('golpe'); });
+  document.querySelectorAll('[data-act]').forEach(b => b.addEventListener('pointerdown', e => { e.preventDefault(); ACT(b.dataset.act); }));
+  document.querySelectorAll('#rar .btn').forEach(b => b.addEventListener('click', () => { document.querySelectorAll('#rar .btn').forEach(x => x.classList.remove('on')); b.classList.add('on'); st.rar = b.dataset.r; }));
+  const tog = (id, key) => { const b = document.getElementById(id); b.addEventListener('click', () => { st[key] = !st[key]; b.classList.toggle('on', st[key]); }); };
+  tog('spin', 'spin'); tog('walkBtn', 'circle');
+  document.getElementById('zoom').addEventListener('input', e => st.zoom = +e.target.value);
+  document.getElementById('toggle').addEventListener('click', () => { const p = document.getElementById('panel'); p.classList.toggle(matchMedia('(pointer:coarse)').matches ? 'open' : 'min'); });
+  // joystick
+  const joy = document.getElementById('joy'), knob = joy.querySelector('i'); let jid = null;
+  const jmove = e => { const r = joy.getBoundingClientRect(); let dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2); const l = Math.hypot(dx, dy), mx = r.width / 2 - 10; if (l > mx) { dx *= mx / l; dy *= mx / l; } knob.style.transform = `translate(${dx}px,${dy}px)`; st.joy = [dx / mx, dy / mx]; };
+  joy.addEventListener('pointerdown', e => { jid = e.pointerId; joy.setPointerCapture(jid); jmove(e); });
+  joy.addEventListener('pointermove', e => { if (e.pointerId === jid) jmove(e); });
+  const jend = () => { jid = null; st.joy = [0, 0]; knob.style.transform = ''; };
+  joy.addEventListener('pointerup', jend); joy.addEventListener('pointercancel', jend);
+
+  // tela -> mundo: direção (sx, sy) no isométrico 2:1
+  const screenDirToWorld = (sx, sy) => { const wx = sx + 2 * sy, wy = -sx + 2 * sy; const l = Math.hypot(wx, wy) || 1; return [wx / l, wy / l]; };
+
+  // ---------- chão ----------
+  const hash = (x, y) => { let h = (x * 374761393 + y * 668265263) ^ 0x5bf03635; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967295; };
+  function drawFloor(camX, camY, s, cx, cy) {
+    const R = Math.ceil(Math.max(W, H) / s * 1.2) + 2, x0 = Math.floor(camX), y0 = Math.floor(camY);
+    for (let gy = y0 - R; gy <= y0 + R; gy++) for (let gx = x0 - R; gx <= x0 + R; gx++) {
+      const p = [[gx, gy, 0], [gx + 1, gy, 0], [gx + 1, gy + 1, 0], [gx, gy + 1, 0]].map(q => proj([q[0] - camX, q[1] - camY, 0], s));
+      if (p[0][1] + cy > H + s || p[2][1] + cy < -s) continue;
+      const h = hash(gx, gy), l = 15 + h * 9;
+      ctx.beginPath(); p.forEach((q, i) => i ? ctx.lineTo(q[0] + cx, q[1] + cy) : ctx.moveTo(q[0] + cx, q[1] + cy)); ctx.closePath();
+      ctx.fillStyle = `rgb(${l + 6 | 0},${l | 0},${l - 1 | 0})`; ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineWidth = Math.max(1, s * 0.02); ctx.stroke();
+      if (h > 0.86) { // ossinhos e pó no chão
+        const q = proj([gx + 0.5 - camX, gy + 0.5 - camY, 0], s), a = h * 40;
+        ctx.save(); ctx.translate(q[0] + cx, q[1] + cy); ctx.scale(1, 0.5); ctx.rotate(a);
+        ctx.strokeStyle = 'rgba(200,180,140,.35)'; ctx.lineWidth = s * 0.03; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(-s * 0.18, 0); ctx.lineTo(s * 0.18, 0); ctx.stroke();
+        ctx.fillStyle = 'rgba(200,180,140,.35)'; for (const e of [-1, 1]) { ctx.beginPath(); ctx.arc(e * s * 0.19, -s * 0.02, s * 0.03, 0, 7); ctx.arc(e * s * 0.19, s * 0.03, s * 0.03, 0, 7); ctx.fill(); }
+        ctx.restore();
+      }
+    }
+  }
+
+  // ---------- loop ----------
+  let last = performance.now(), ang = 0;
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    // direção de movimento
+    let mx = 0, my = 0; const K = st.keys;
+    if (K['a'] || K['arrowleft']) mx -= 1; if (K['d'] || K['arrowright']) mx += 1; if (K['w'] || K['arrowup']) my -= 1; if (K['s'] || K['arrowdown']) my += 1;
+    mx += st.joy[0]; my += st.joy[1];
+    let moving = Math.hypot(mx, my) > 0.15, facing = null, vx = 0, vy = 0;
+    if (st.circle && !moving) { ang += dt * 0.9; const d = [Math.cos(ang + Math.PI / 2), Math.sin(ang + Math.PI / 2)]; mx = 0; moving = true; facing = Math.atan2(d[1], d[0]); vx = d[0] * 2.4; vy = d[1] * 2.4; }
+    else if (moving) { const d = screenDirToWorld(mx, my); facing = Math.atan2(d[1], d[0]); vx = d[0] * 2.6; vy = d[1] * 2.6; }
+    if (st.spin && !moving) facing = hero.facing + dt * 1.1;
+    const act = hero.action && hero.action.name;
+    if (hero.dead || act === 'esmagar' || act === 'brado' || act === 'golpe3') { vx = vy = 0; moving = false; }
+    if (st.dash && st.dash.t > 0) { st.dash.t -= dt; vx = Math.cos(hero.facing) * st.dash.v; vy = Math.sin(hero.facing) * st.dash.v; moving = act === 'investida'; }
+    if (act === 'redemoinho') { vx *= 0.6; vy *= 0.6; }
+    st.x += vx * dt; st.y += vy * dt;
+    hero.update(dt, { moving, facing, vx, vy, speed: 2.6 });
+
+    // desenho
+    const s = st.zoom;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.fillStyle = '#050304'; ctx.fillRect(0, 0, W, H);
+    const cx = W / 2, cy = H * 0.6;
+    drawFloor(st.x, st.y, s * 0.75, cx, cy);
+    // poça de luz quente da tocha + vinheta
+    let g = ctx.createRadialGradient(cx - s * 0.3, cy - s * 0.4, 0, cx, cy, Math.max(W, H) * 0.6);
+    g.addColorStop(0, 'rgba(255,170,90,.16)'); g.addColorStop(0.35, 'rgba(120,60,30,.06)'); g.addColorStop(1, 'rgba(0,0,0,.85)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    hero.draw(ctx, cx, cy, { scale: s, rarity: st.rar || null, hurt: act === 'dano' ? 1 - hero.action.t / hero.action.dur : 0 });
+
+    // miniatura no tamanho do jogo (118 px de altura)
+    if (mini.offsetParent) {
+      mctx.setTransform(1, 0, 0, 1, 0, 0); mctx.clearRect(0, 0, 268, 300);
+      const mg = mctx.createRadialGradient(134, 210, 0, 134, 210, 160); mg.addColorStop(0, '#2a2022'); mg.addColorStop(1, '#0c0809'); mctx.fillStyle = mg; mctx.fillRect(0, 0, 268, 300);
+      mctx.setTransform(2, 0, 0, 2, 0, 0);
+      hero.draw(mctx, 67, 120, { scale: 74, rarity: st.rar || null });
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
