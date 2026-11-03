@@ -44,7 +44,7 @@ input[type=range]{width:100%;accent-color:#b98a45}
 <div id="panel" class="frame">
   <button id="toggle" aria-label="Mostrar ou esconder o painel">☰</button>
   <h1>Guerreiro Ósseo</h1>
-  <p class="sub">Ortopedista de Guerra · 2.5D procedural</p>
+  <p class="sub">Ortopedista de Guerra · malhas texturizadas 2.5D</p>
   <div class="body">
     <div class="lbl">Habilidades</div>
     <div class="row">
@@ -56,6 +56,13 @@ input[type=range]{width:100%;accent-color:#b98a45}
       <button class="btn" data-act="rolar">Esquiva<kbd>Espaço</kbd></button>
       <button class="btn" data-act="dano">Dano<kbd>H</kbd></button>
       <button class="btn" data-act="morte">Morte / Reviver<kbd>K</kbd></button>
+    </div>
+    <div class="lbl">Cores do tema</div>
+    <div class="row" id="thm">
+      <button class="btn on" data-t="carmesim">Carmesim</button>
+      <button class="btn" data-t="real">Real</button>
+      <button class="btn" data-t="peste">Peste</button>
+      <button class="btn" data-t="obsidiana">Obsidiana</button>
     </div>
     <div class="lbl">Arma (raridade)</div>
     <div class="row" id="rar">
@@ -111,6 +118,7 @@ input[type=range]{width:100%;accent-color:#b98a45}
   cv.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse') ACT('golpe'); });
   document.querySelectorAll('[data-act]').forEach(b => b.addEventListener('pointerdown', e => { e.preventDefault(); ACT(b.dataset.act); }));
   document.querySelectorAll('#rar .btn').forEach(b => b.addEventListener('click', () => { document.querySelectorAll('#rar .btn').forEach(x => x.classList.remove('on')); b.classList.add('on'); st.rar = b.dataset.r; }));
+  document.querySelectorAll('#thm .btn').forEach(b => b.addEventListener('click', () => { document.querySelectorAll('#thm .btn').forEach(x => x.classList.remove('on')); b.classList.add('on'); hero.setTheme(b.dataset.t); }));
   const tog = (id, key) => { const b = document.getElementById(id); b.addEventListener('click', () => { st[key] = !st[key]; b.classList.toggle('on', st[key]); }); };
   tog('spin', 'spin'); tog('walkBtn', 'circle');
   document.getElementById('zoom').addEventListener('input', e => st.zoom = +e.target.value);

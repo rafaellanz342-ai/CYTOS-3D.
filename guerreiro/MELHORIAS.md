@@ -35,6 +35,26 @@ Esquiva, dano e morte | Rolamento, recuo e queda para trás
 
 O brilho de raridade da arma (Comum, Mágico, Raro, Lendário) usa as cores de `RARITY` do jogo.
 
+## Versão 2: texturas, cores e mais polígonos
+
+- **Malhas de verdade.** Cada parte do corpo é um conjunto de polígonos (cerca de 1.000 faces no zoom grande e cerca de 400 no tamanho do jogo): tubos de 16 lados nos membros, esferas em gomos na cabeça, nas ombreiras e nas joelheiras, um tronco de 9 anéis, uma capa 7×8 e um escudo abaulado com aro e verso. A luz é calculada em cada face e há especular no metal e contraluz colorido.
+- **Texturas procedurais**, todas desenhadas por código (o arquivo continua sem imagens) e aplicadas face a face com mapeamento UV:
+
+  Textura | Detalhes
+  ---|---
+  Osso | Poros, veios e rachaduras
+  Ferro escovado | Riscos e ferrugem
+  Cota de malha | Anéis entrelaçados (braços e saiote)
+  Couro | Costura
+  Tecido | Trama, dobras, barra bordada e **emblema de ossos cruzados** nas costas da capa
+  Couraça | **Costelas, esterno e clavículas em relevo**, espinha nas costas, cinto dourado rebitado com fivela-crânio
+  Elmo | Crânio com órbitas, nariz e dentes, e maxilar separado
+  Escudo | Raios de osso, aro rebitado e crânio central; verso de tábuas com correias de couro
+  Lâmina | Fêmur com canal de medula vermelho e runas gravadas
+
+- **Temas de cor:** Carmesim, Real (roxo e ouro), Peste (verde) e Obsidiana (cinza e prata). Eles mudam o tecido, o escudo, os detalhes dourados, a gema que brilha no cinto e nas ombreiras e a cor do contraluz. Use `heroi.setTheme('real')` ou `GuerreiroOsseo.create({ theme: 'peste' })`.
+- **Desempenho:** cada textura é pré-iluminada em 10 níveis de luz, então cada face exige uma única pintura. No tamanho do jogo (escala 72) o nível de detalhe cai automaticamente. Num Chromium sem placa de vídeo, o desenho levou cerca de 13 ms por quadro no tamanho do jogo e cerca de 32 ms no zoom grande. Com placa de vídeo deve ser mais rápido, mas isso não foi medido.
+
 ## Como ligar no jogo
 
 1. Cole o conteúdo de `guerreiro-osseo.js` em um `<script>` antes do script principal do jogo.
