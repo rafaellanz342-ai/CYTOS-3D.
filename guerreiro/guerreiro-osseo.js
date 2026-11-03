@@ -452,7 +452,7 @@
   // para o atual, esticando só ao longo do eixo (para casar comprimentos), e misturado entre dois ossos.
   const frameOf = (a, b, ref) => { const d = norm(sub(b, a)); let e1 = sub(ref, mul(d, dot(ref, d))); if (len(e1) < 1e-4) e1 = cross(d, [1, 0, 0]); e1 = norm(e1); return { a, d, e1, e2: cross(d, e1), L: len(sub(b, a)) }; };
   Warrior.prototype.skinBody = function (face, lowDetail) {
-    const BD = root.GUERREIRO_CORPO, J = this.J, M = lowDetail ? BD.baixa : BD.alta;
+    const BD = root.GUERREIRO_CORPO, J = this.J, M = lowDetail ? (BD.minima || BD.baixa) : BD.alta;
     if (!BD._rest) BD._rest = BD.ossos.map(o => frameOf(o.a, o.b, o.nome.startsWith('pe-') ? [0, 1, 0] : [0, 0, 1]));
     const pelA = add(J.pel, mul(J.pU, 0.026)), side = { l: 'L', r: 'R' };
     const cur = BD.ossos.map((o, i) => {
@@ -484,7 +484,7 @@
     };
     skin(M, i => (M.pano[i] ? 'linen' : 'body'), fc => fc.map(j => M.uv[j]), 0);
     // armadura moldada: cascas tiradas da própria superfície do corpo, deslocadas pela espessura de cada peça
-    if (this.armor && BD.armadura) for (const pc of (lowDetail ? BD.armadura.baixa : BD.armadura.alta)) skin(pc, () => pc.tex, (fc, i) => pc.fu[i], 0.004);
+    if (this.armor && BD.armadura) for (const pc of (lowDetail ? (BD.armadura.minima || BD.armadura.baixa) : BD.armadura.alta)) skin(pc, () => pc.tex, (fc, i) => pc.fu[i], 0.004);
   };
 
   // Ação sobreposta: cada parâmetro da pose segue o alvo por uma mola amortecida (ζ < 1). A cabeça e o tronco
@@ -995,6 +995,14 @@
     else { g.fillStyle = `rgba(255,206,150,${Math.min(0.4, (f - 1) * 0.5)})`; g.fillRect(0, 0, c.width, c.height); }
     return (TX._lv[key] = c);
   }
+  // cor média de uma textura pré-iluminada (usada no lugar da textura quando o personagem está pequeno na tela)
+  function flatColor(TX, k, L, NL) {
+    TX._flat = TX._flat || {}; const key = k + '@' + L; if (TX._flat[key]) return TX._flat[key];
+    const [c, g] = mkCanvas(16, 16); g.drawImage(shadedTex(TX, k, L, NL), 0, 0, 16, 16); const d = g.getImageData(0, 0, 16, 16).data;
+    let r = 0, gg = 0, b = 0, a = 0; for (let i = 0; i < d.length; i += 4) { const w = d[i + 3]; r += d[i] * w; gg += d[i + 1] * w; b += d[i + 2] * w; a += w; }
+    const n = a || 1; return (TX._flat[key] = `rgba(${r / n | 0},${gg / n | 0},${b / n | 0},${(a / 256 / 255).toFixed(2)})`);
+  }
+
   // matriz afim que leva o espaço da textura (px) ao triângulo na tela
   function uvMatrix(t0, t1, t2, s0, s1, s2) {
     const ux = t1[0] - t0[0], uy = t1[1] - t0[1], vx = t2[0] - t0[0], vy = t2[1] - t0[1], det = ux * vy - vx * uy;
@@ -1023,6 +1031,10 @@
     this._buf = this._buf || {};
     let bf = this._buf[W]; if (!bf) { bf = this._buf[W] = [document.createElement('canvas'), document.createElement('canvas')]; bf.forEach(k => { k.width = W; k.height = H; }); }
     this.cv = bf[0]; this.sil = bf[1]; this.cx = this.cv.getContext('2d'); this.sx = this.sil.getContext('2d');
+    // desempenho: a pose 3D pode ser redesenhada a no máximo o.maxHz por segundo (a posição na tela segue a cada quadro)
+    const now = typeof performance !== 'undefined' ? performance.now() : 0;
+    const reuse = !!(o.maxHz && bf.bb && bf.lastS === s && now - bf.lastT < 1000 / o.maxHz);
+    if (!reuse) { bf.lastT = now; bf.lastS = s;
     const themeKey = this.theme || 'carmesim', TX = buildTextures(themeKey), th = TX.theme;
     const c = this.cx;
     if (!bf.pat || bf.patTheme !== themeKey || bf.patTX !== TX) { bf.pat = {}; bf.patTheme = themeKey; bf.patTX = TX; }
@@ -1183,7 +1195,7 @@
         M.f.forEach((fc, i) => face(fc.map(j => W[j]), fc.map(j => M.uv[j]), tex, toV(M._n[i]), { bias }));
       };
       // expressões faciais: soma ponderada dos deslocamentos (unidades de expressão do MPFB2) sobre a malha da cabeça
-      const HM = lowDetail ? CABD.baixa : CABD.alta, EW = this.exprW; let VL = null;
+      const HM = lowDetail ? (CABD.minima || CABD.baixa) : CABD.alta, EW = this.exprW; let VL = null;
       if (HM.ex && EW) for (const nm in EW) { const w = EW[nm] * (nm === 'piscar' ? 1 : 1.6), D = HM.ex[nm]; if (!D || w < 0.01) continue; // 1,6×: legível de longe
         if (!VL) VL = HM.v.map(q => q.slice()); for (const [n, dx, dy, dz] of D) { VL[n][0] += dx * w; VL[n][1] += dy * w; VL[n][2] += dz * w; } }
       meshLocal(HM, 'head', 0.006, 1, null, VL);
@@ -1304,20 +1316,22 @@
       const gg = c.createRadialGradient(q[0], q[1], 0, q[0], q[1], r); gg.addColorStop(0, `rgba(255,255,230,${gl.a})`); gg.addColorStop(0.25, `rgba(${gl.rgb[0]},${gl.rgb[1]},${gl.rgb[2]},${gl.a})`); gg.addColorStop(1, `rgba(${gl.rgb[0]},${gl.rgb[1]},${gl.rgb[2]},0)`);
       c.fillStyle = gg; c.beginPath(); c.arc(q[0], q[1], r, 0, TAU); c.fill(); c.restore();
     };
+    let bx0 = 1e9, by0 = 1e9, bx1 = -1e9, by1 = -1e9; // retângulo ocupado pelo personagem (só ele é copiado depois)
     for (const f of faces) {
       while (gi < glows.length && glows[gi].d < f.d) drawGlow(glows[gi++]);
       let n = f.n; const vis = dot(n, CAM);
       if (!f.two && vis < -0.02) continue;
       if (f.two && vis < 0) n = mul(n, -1);
       const sp = (f.poly || f.pts).map(S);
-      let cx0 = 0, cy0 = 0; for (const q of sp) { cx0 += q[0]; cy0 += q[1]; } cx0 /= sp.length; cy0 /= sp.length;
+      let cx0 = 0, cy0 = 0; for (const q of sp) { cx0 += q[0]; cy0 += q[1]; if (q[0] < bx0) bx0 = q[0]; if (q[0] > bx1) bx1 = q[0]; if (q[1] < by0) by0 = q[1]; if (q[1] > by1) by1 = q[1]; } cx0 /= sp.length; cy0 /= sp.length;
       c.beginPath();
       sp.forEach((q, i) => { const dx = q[0] - cx0, dy = q[1] - cy0, l = Math.hypot(dx, dy) || 1, ex = q[0] + dx / l * 0.6, ey = q[1] + dy / l * 0.6; i ? c.lineTo(ex, ey) : c.moveTo(ex, ey); });
       c.closePath();
       const lit = 0.45 + 0.76 * Math.max(0, dot(n, LIGHT_W)) + 0.1 * n[2] + (f.tex === 'face' || f.tex === 'head' ? 0.2 : f.tex === 'body' ? 0.08 : f.tex === 'skin' || f.tex === 'arm' ? 0.1 : 0);
-      const img = TX[f.tex], pat = patFor(f.tex, clamp(Math.round((lit - 0.12) / 1.13 * (NL - 1)), 0, NL - 1)), last = f.pts.length - 1;
-      const M = uvMatrix([f.uv[0][0] * img.width, f.uv[0][1] * img.height], [f.uv[1][0] * img.width, f.uv[1][1] * img.height], [f.uv[last][0] * img.width, f.uv[last][1] * img.height], S(f.pts[0]), S(f.pts[1]), S(f.pts[last]));
-      if (M && pat.setTransform) { pat.setTransform(new DOMMatrix(M)); c.fillStyle = pat; } else c.fillStyle = FALLBACK[f.tex];
+      const lvl = clamp(Math.round((lit - 0.12) / 1.13 * (NL - 1)), 0, NL - 1), img = TX[f.tex], last = f.pts.length - 1;
+      const pat = lowDetail ? null : patFor(f.tex, lvl), M = lowDetail ? null : uvMatrix([f.uv[0][0] * img.width, f.uv[0][1] * img.height], [f.uv[1][0] * img.width, f.uv[1][1] * img.height], [f.uv[last][0] * img.width, f.uv[last][1] * img.height], S(f.pts[0]), S(f.pts[1]), S(f.pts[last]));
+      if (lowDetail) c.fillStyle = flatColor(TX, f.tex, lvl, NL); // no tamanho do jogo a textura não aparece: cor média, bem mais barata
+      else if (M && pat.setTransform) { pat.setTransform(new DOMMatrix(M)); c.fillStyle = pat; } else c.fillStyle = FALLBACK[f.tex];
       c.fill();
       const spc = SPEC[f.tex], hs = spc ? spc[0] * Math.pow(Math.max(0, dot(n, Hv)), spc[1]) : 0;
       const rm = f.tex === 'hairStrand' || f.tex === 'hair' ? 0 : Math.pow(1 - clamp(dot(n, CAM), 0, 1), 3) * Math.max(0, -dot(n, LIGHT_W) + 0.3) * 0.6;
@@ -1329,10 +1343,16 @@
       }
     }
     while (gi < glows.length) drawGlow(glows[gi++]);
+    const pad = Math.ceil(s * 0.08) + 4;
+    bf.bb = [Math.max(0, Math.floor(ox + bx0 - pad)), Math.max(0, Math.floor(oy + by0 - pad))]; bf.bb.push(Math.min(W, Math.ceil(ox + bx1 + pad)) - bf.bb[0], Math.min(H, Math.ceil(oy + by1 + pad)) - bf.bb[1]);
+    if (!(bf.bb[2] > 0 && bf.bb[3] > 0)) bf.bb = [0, 0, W, H];
     // grão de pintura
     c.setTransform(1, 0, 0, 1, 0, 0); c.globalCompositeOperation = 'source-atop'; c.globalAlpha = 0.14;
-    c.fillStyle = c.createPattern(grain(), 'repeat'); c.fillRect(0, 0, W, H);
+    c.fillStyle = c.createPattern(grain(), 'repeat'); c.fillRect(bf.bb[0], bf.bb[1], bf.bb[2], bf.bb[3]);
     c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+    }
+    const [bx, by, bw, bh] = bf.bb, dX = x - ox + bx, dY = y - oy + by;
+    const blit = (img, ddx, ddy) => ctx.drawImage(img, bx, by, bw, bh, dX + (ddx || 0), dY + (ddy || 0), bw, bh);
 
     // ---------------- composição no contexto do jogo ----------------
     const alpha = o.alpha == null ? 1 : o.alpha;
@@ -1342,19 +1362,19 @@
     sg.addColorStop(0, 'rgba(0,0,0,.6)'); sg.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = sg; ctx.beginPath(); ctx.ellipse(x + pc[0], y + pc[1], shW, shW * 0.5, 0, 0, TAU); ctx.fill();
     this.drawFx(ctx, x, y, s, true);
-    const sx = this.sx; sx.globalCompositeOperation = 'source-over'; sx.clearRect(0, 0, W, H); sx.drawImage(this.cv, 0, 0); sx.globalCompositeOperation = 'source-in';
+    const sx = this.sx; sx.globalCompositeOperation = 'source-over'; sx.clearRect(bx, by, bw, bh); sx.drawImage(this.cv, bx, by, bw, bh, bx, by, bw, bh); sx.globalCompositeOperation = 'source-in';
     const glowCol = o.rarity || (this.rage > 0.05 ? `rgba(255,60,30,${(0.35 + 0.5 * this.rage).toFixed(2)})` : null);
     if (glowCol) {
-      sx.fillStyle = glowCol; sx.fillRect(0, 0, W, H);
+      sx.fillStyle = glowCol; sx.fillRect(bx, by, bw, bh);
       ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.shadowColor = glowCol; ctx.shadowBlur = s * 0.22; ctx.globalAlpha *= 0.55 + 0.15 * Math.sin(this.t * 4);
-      ctx.drawImage(this.sil, x - ox, y - oy); ctx.restore();
+      blit(this.sil); ctx.restore();
       sx.globalCompositeOperation = 'source-in';
     }
-    sx.fillStyle = INK; sx.fillRect(0, 0, W, H);
-    const ow = Math.max(1, s * 0.02);
-    for (let i = 0; i < 8; i++) { const a = i / 8 * TAU; ctx.drawImage(this.sil, x - ox + Math.cos(a) * ow, y - oy + Math.sin(a) * ow); }
-    ctx.drawImage(this.cv, x - ox, y - oy);
-    if (o.hurt > 0) { sx.fillStyle = `rgba(255,${(200 - 160 * o.hurt) | 0},${(180 - 160 * o.hurt) | 0},1)`; sx.fillRect(0, 0, W, H); ctx.globalAlpha = alpha * 0.7 * o.hurt; ctx.drawImage(this.sil, x - ox, y - oy); ctx.globalAlpha = alpha; }
+    sx.fillStyle = INK; sx.fillRect(bx, by, bw, bh);
+    const ow = Math.max(1, s * 0.02), nO = s < 90 ? 4 : 8; // contorno de tinta: 4 cópias no tamanho do jogo, 8 de perto
+    for (let i = 0; i < nO; i++) { const a = (i + (nO === 4 ? 0.5 : 0)) / nO * TAU; blit(this.sil, Math.cos(a) * ow, Math.sin(a) * ow); }
+    blit(this.cv);
+    if (o.hurt > 0) { sx.fillStyle = `rgba(255,${(200 - 160 * o.hurt) | 0},${(180 - 160 * o.hurt) | 0},1)`; sx.fillRect(bx, by, bw, bh); ctx.globalAlpha = alpha * 0.7 * o.hurt; blit(this.sil); ctx.globalAlpha = alpha; }
     this.drawTrail(ctx, x, y, s, o.rarity);
     this.drawFx(ctx, x, y, s, false);
     ctx.restore();

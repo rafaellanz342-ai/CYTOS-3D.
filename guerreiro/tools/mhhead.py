@@ -57,6 +57,7 @@ def decimate(faces, cell):
         if len(g2)>=3: nf.append(g2)
     return nf
 hi=pack(decimate(body,(top-chinY)/22)); lo=pack(decimate(body,(top-chinY)/8.5))
+mn=pack(decimate(body,(top-chinY)/4.5)); mn.pop('ex',None)   # mínimo: cabeça com ~15 px na tela do jogo
 eyes=[]
 for nm in ('helper-l-eye','helper-r-eye'):
     f=groups[nm]; ids=sorted({i for fc in f for i in fc}); m={v:n for n,v in enumerate(ids)}; c0=mean(ids)
@@ -64,7 +65,7 @@ for nm in ('helper-l-eye','helper-r-eye'):
     eyes.append({'v':[loc(V[i]) for i in ids],'uv':[[round(0.5+(V[i][0]-c0[0])/(2*r),4),round(0.5-(V[i][1]-c0[1])/(2*r),4)] for i in ids],'f':[[m[i] for i in fc] for fc in f]})
 hair=[f for f in groups['helper-hair'] if all(V[i][1]>6.9 for i in f)]
 hp=pack(hair)
-data={'fonte':'MakeHuman base mesh hm08 (CC0) — makehumancommunity.org','alta':hi,'baixa':lo,'olhos':eyes,'couro':hp}
+data={'fonte':'MakeHuman base mesh hm08 (CC0) — makehumancommunity.org','alta':hi,'baixa':lo,'minima':mn,'olhos':eyes,'couro':hp}
 js='/* Cabeça anatômica extraída do modelo-base MakeHuman hm08 (CC0, makehumancommunity.org).\n   Coordenadas em metros no referencial da cabeça: [frente, lado, cima], origem na altura das orelhas.\n   uv: projeção frontal alinhada ao retrato (olhos, nariz, boca, queixo). Gerado por tools/mhhead.py. */\nwindow.GUERREIRO_CABECA = '+json.dumps(data,separators=(',',':'))+';\n'
 open(out,'w').write(js)
-print('alta',len(hi['f']),'baixa',len(lo['f']),'cabelo',len(hp['f']),'olhos',[len(e['f']) for e in eyes],'bytes',len(js))
+print('minima',len(mn['f']),'alta',len(hi['f']),'baixa',len(lo['f']),'cabelo',len(hp['f']),'olhos',[len(e['f']) for e in eyes],'bytes',len(js))

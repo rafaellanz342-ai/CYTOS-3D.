@@ -235,6 +235,36 @@ Recursos CC0 encontrados na pesquisa (`REFERENCIAS.md`) e baixados do GitHub:
 
 Para regenerar: `MH_ALVOS=… MH_PESOS=…/weights.game_engine.json python3 tools/mhbody.py base.obj guerreiro-corpo.js` e `MH_ALVOS=… MH_EXPR=…/expressoes python3 tools/mhhead.py base.obj guerreiro-cabeca.js`.
 
+## Versão 11: integração no jogo e otimização de FPS
+
+`tools/integrar_jogo.py` monta `jogo/O_Atlas_Perdido.html` a partir do jogo original:
+- **Guerreiro 3D no jogo:** embute os módulos e troca o desenho da classe Guerreiro.
+- **Recortes dos atlas:** troca as 13 chamadas que desenhavam a partir dos atlas gigantes (2048×4378, 2048×4608…) por **recortes em cache**, um canvas pequeno por sprite, criado uma vez. Texturas acima de 4096 px caem para o desenho por software em muitos celulares.
+
+**Medição** (Chromium sem placa de vídeo, partida de Guerreiro andando e atacando, perfil de CPU por função):
+
+| | Antes | Depois |
+|---|---|---|
+| FPS médio | 30 | ≈ 47 |
+| quadro p95 | 50 ms | ≈ 33 ms |
+| `spr`/`restore` (sprites do jogo) | 19% do tempo | some do topo do perfil |
+| redesenho do guerreiro | 12,8 ms | 4,5 ms |
+| reaproveitamento da pose | n/a | 0,7 ms |
+
+**Otimizações do guerreiro:**
+- **Recorte:** a composição (contorno, brilho, lampejo de dano) copia só o retângulo ocupado pelo personagem, não a tela de trabalho inteira.
+- **Contorno:** 4 cópias em vez de 8 no tamanho do jogo.
+- **Pose a 30 Hz:** a pose 3D é redesenhada a até 30 vezes por segundo (`maxHz`); a posição na tela continua a cada quadro.
+- **Nível de detalhe mínimo:** no tamanho do jogo, a cabeça usa 144 faces, o corpo 242 e a armadura 74.
+- **Cor sólida:** no tamanho do jogo, cada face usa a cor média da textura no seu nível de luz, sem textura por face (a textura não é visível com a cabeça a ~15 px).
+
+**Restante no perfil:**
+- **Rasterização da tela inteira:** cerca de 55% do tempo, sem função atribuída (terreno, iluminação, pós-processamento).
+- **Efeitos de habilidade aditivos** (`artDraw`): cerca de 8%.
+- **`drawLighting`:** cerca de 4%.
+
+Próximos candidatos: reduzir a resolução interna da iluminação e do *bloom*, e limitar efeitos aditivos simultâneos.
+
 ## Como ligar no jogo
 
 1. Cole o conteúdo de `guerreiro-osseo.js` em um `<script>` antes do script principal do jogo.

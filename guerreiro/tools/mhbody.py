@@ -194,11 +194,11 @@ def armor(faces):
         out.append({'nome':nm,'tex':tex,'v':vv,'w':w,'f':[[m[i] for i in f] for f in sel],'fu':fu})
     return out
 H=J['joint-head-2'][1]-J['joint-ground'][1]
-hiF=decimate(body,H/52); loF=decimate(body,H/24)
-hi=pack(hiF); lo=pack(loF)
-arm={'alta':armor(hiF),'baixa':armor(loF)}
+hiF=decimate(body,H/52); loF=decimate(body,H/24); mnF=decimate(body,H/15)
+hi=pack(hiF); lo=pack(loF); mn=pack(mnF)
+arm={'alta':armor(hiF),'baixa':armor(loF),'minima':armor(mnF)}
 bones=[{'nome':b[0],'a':[round(c*K,4) for c in b[1]],'b':[round(c*K,4) for c in b[2]]} for b in B]
-data={'fonte':'MakeHuman base mesh hm08 (CC0) — makehumancommunity.org','ossos':bones,'alta':hi,'baixa':lo,'armadura':arm,'chao':round(J['joint-ground'][1]*K,4)}
+data={'fonte':'MakeHuman base mesh hm08 (CC0) — makehumancommunity.org','ossos':bones,'alta':hi,'baixa':lo,'minima':mn,'armadura':arm,'chao':round(J['joint-ground'][1]*K,4)}
 js='/* Corpo anatômico (sem cabeça e sem mãos) extraído do modelo-base MakeHuman hm08 (CC0, makehumancommunity.org),\n   espelhado para o referencial do Guerreiro Ósseo, com pesos de skinning por osso. Gerado por tools/mhbody.py. */\nwindow.GUERREIRO_CORPO = '+json.dumps(data,separators=(',',':'))+';\n'
 open(out,'w').write(js)
-print('pecas',[(p['nome'],len(p['f'])) for p in arm['alta']],'baixa',sum(len(p['f']) for p in arm['baixa']));print('K',K,'alta',len(hi['f']),len(hi['v']),'baixa',len(lo['f']),len(lo['v']),'bytes',len(js))
+print('pecas',[(p['nome'],len(p['f'])) for p in arm['alta']],'baixa',sum(len(p['f']) for p in arm['baixa']));print('minima',len(mn['f']),'armadura minima',sum(len(p['f']) for p in arm['minima']));print('K',K,'alta',len(hi['f']),len(hi['v']),'baixa',len(lo['f']),len(lo['v']),'bytes',len(js))
