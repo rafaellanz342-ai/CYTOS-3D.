@@ -315,3 +315,12 @@ if (P.cls.id === 'guerreiro' && window.GuerreiroOsseo && !P.dead) {
   - tecido: trama tafetá com fios irregulares, dobras, furos, barro e sangue;
   - metal: martelado, escovado, filigrana gravada, rebites, corrosão e ferrugem.
 - `montar_imagens.py` usa `<chave>-claude.jpg` antes de `<chave>-canva.jpg`. O rosto continua o do Canva. A pele entra com opacidade menor (0,6) para não granular.
+
+## Versão 14: arte das armas no mesmo estilo
+- `tools/gerar_armas.py` pinta por código as 16 armas do Guerreiro, com as mesmas texturas e o mesmo relevo cozido do corpo.
+  - **7 espadas:** Periosteal, Gládio, Hemorrágica (sulco de sangue), Diáfise (lâmina de osso), Serra, Hemática (ondulada) e Espadão (guarda de vértebras).
+  - **4 lanças + a lendária:** Vertebral (anéis de vértebra), Pique Tibial (haste de osso), Rádio (asas e borla carmesim), Diáfise Femoral (cabeça do fêmur no cabo) e **Lança do Capitato** (dourada, osso do carpo e brilho).
+  - **4 foices:** Sináptica (crânio no encaixe), Mielínica (bainhas de osso), Ranvier (entalhes) e Condução Saltatória (veias incandescentes).
+- No jogo (`integrar_jogo.py`): `spr` (arma no chão) e `iconTo` (inventário e detalhe) usam a arte nova; no inventário, ela fica na diagonal.
+- **Drop:** primeiro sorteia o tipo (espada, lança ou foice, 1/3 cada) e depois o modelo. Em 600 drops: 197 espadas, 193 lanças, 210 foices.
+- **Saves antigos:** as armas do Guerreiro recebem a arte nova pelo nome, e o "Martelo do Capitato" vira "Lança do Capitato". Nenhum ícone antigo de arma sobra para o Guerreiro.
